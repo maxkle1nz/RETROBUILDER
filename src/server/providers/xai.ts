@@ -1,5 +1,5 @@
 /**
- * xAI Grok Provider
+ * xAI Grok 4.20 Provider
  * 
  * Uses the OpenAI-compatible API at https://api.x.ai/v1
  * Requires XAI_API_KEY environment variable.
@@ -9,7 +9,7 @@ import OpenAI from 'openai';
 import type { AIProvider, ChatMessage, CompletionConfig } from './index.js';
 
 const XAI_BASE_URL = 'https://api.x.ai/v1';
-const XAI_DEFAULT_MODEL = process.env.XAI_MODEL || 'grok-3-mini';
+const XAI_DEFAULT_MODEL = process.env.XAI_MODEL || 'grok-4.20-non-reasoning';
 
 export function createXAIProvider(): AIProvider {
   const apiKey = process.env.XAI_API_KEY;
@@ -41,7 +41,7 @@ export function createXAIProvider(): AIProvider {
           role: m.role,
           content: m.content,
         })),
-        max_tokens: config?.maxTokens || 8192,
+        max_tokens: config?.maxTokens || 16384,
         temperature: config?.temperature ?? 0.7,
       };
 
