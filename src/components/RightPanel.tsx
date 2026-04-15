@@ -8,9 +8,28 @@ export default function RightPanel() {
   const { closeRightPanel, selectedNode, appMode } = useGraphStore();
   const [m1ndData, setM1ndData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+
+  const connectM1nd = async () => {
+    setLoading(true);
+    try {
+      await m1nd.connect();
+      setIsConnected(true);
+      setM1ndData({ message: 'Connected to m1nd MCP proxy.' });
+    } catch (e) {
+      console.error(e);
+      setM1ndData({ error: 'Failed to connect to m1nd MCP proxy. Is it running on ws://localhost:8080?' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const runM1ndAction = async (action: string) => {
     if (!selectedNode) return;
+    if (!isConnected) {
+      setM1ndData({ error: 'Please connect to m1nd first.' });
+      return;
+    }
     setLoading(true);
     try {
       let result;
@@ -27,7 +46,7 @@ export default function RightPanel() {
       setM1ndData(result);
     } catch (e) {
       console.error(e);
-      setM1ndData({ error: 'Failed to connect to m1nd MCP proxy.' });
+      setM1ndData({ error: 'Failed to execute m1nd action.' });
     } finally {
       setLoading(false);
     }
@@ -65,11 +84,22 @@ export default function RightPanel() {
 
             {appMode === 'm1nd' && (
               <div className="border-t border-border-subtle pt-4">
-                <h4 className="text-xs font-bold text-text-dim uppercase tracking-widest mb-3">m1nd Actions</h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-text-dim uppercase tracking-widest">m1nd Actions</h4>
+                  {!isConnected && (
+                    <button 
+                      onClick={connectM1nd}
+                      disabled={loading}
+                      className="text-[10px] px-2 py-1 bg-accent/20 text-accent rounded hover:bg-accent hover:text-bg transition-colors"
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <button 
                     onClick={() => runM1ndAction('impact')}
-                    disabled={loading}
+                    disabled={loading || !isConnected}
                     className="flex flex-col items-center justify-center gap-2 bg-[#1a1f2b] border border-border-subtle p-3 rounded-md hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
                   >
                     <Target size={18} />
@@ -77,7 +107,7 @@ export default function RightPanel() {
                   </button>
                   <button 
                     onClick={() => runM1ndAction('predict')}
-                    disabled={loading}
+                    disabled={loading || !isConnected}
                     className="flex flex-col items-center justify-center gap-2 bg-[#1a1f2b] border border-border-subtle p-3 rounded-md hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
                   >
                     <GitMerge size={18} />

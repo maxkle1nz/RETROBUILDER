@@ -2,14 +2,11 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const openai = new OpenAI({
-  apiKey: process.env.VITE_XAI_API_KEY || "xai-NIx6vSZya2q06QZnzUVCX3YDZ7otv5r3CNe72pBhLHJfEqYbYjqb6kYl6LSsrYM3uhmlubF2n67vcmHm",
-  baseURL: "https://api.x.ai/v1",
-});
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 function extractJSON(text: string): string {
   const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -54,18 +51,18 @@ Ensure the graph has a clear hierarchy and Single Source of Truth (SSOT). Avoid 
 CRITICAL: You must return ONLY valid JSON.`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "grok-beta",
-        messages: [
-          { role: "system", content: systemInstruction },
-          { role: "user", content: `User Prompt: ${prompt}\n\nCurrent Manifesto: ${currentManifesto || 'None'}\nCurrent Graph: ${currentGraph ? JSON.stringify(currentGraph) : 'None'}` }
-        ],
-        response_format: { type: "json_object" }
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: `User Prompt: ${prompt}\n\nCurrent Manifesto: ${currentManifesto || 'None'}\nCurrent Graph: ${currentGraph ? JSON.stringify(currentGraph) : 'None'}`,
+        config: {
+          systemInstruction: systemInstruction,
+          responseMimeType: "application/json",
+        }
       });
-      const rawContent = response.choices[0].message.content || '{"manifesto":"","architecture":"","graph":{"nodes":[],"links":[]}}';
+      const rawContent = response.text || '{"manifesto":"","architecture":"","graph":{"nodes":[],"links":[]}}';
       res.json(JSON.parse(extractJSON(rawContent)));
     } catch (e) {
-      console.error("Failed to parse xAI response", e);
+      console.error("Failed to parse Gemini response", e);
       res.status(500).json({ error: "Failed to generate graph structure" });
     }
   });
@@ -79,14 +76,14 @@ Respond with a concise, highly technical, cyberpunk-flavored confirmation of wha
 Keep it under 3 sentences. Be direct, authoritative, and analytical. Do not use markdown formatting, just plain text.`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "grok-beta",
-        messages: [
-          { role: "system", content: systemInstruction },
-          { role: "user", content: `Manifesto: ${manifesto}\nCurrent Graph Nodes: ${currentGraph.nodes.length}\nUser Prompt: ${prompt}\n\nWhat is your modification plan?` }
-        ]
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: `Manifesto: ${manifesto}\nCurrent Graph Nodes: ${currentGraph.nodes.length}\nUser Prompt: ${prompt}\n\nWhat is your modification plan?`,
+        config: {
+          systemInstruction: systemInstruction,
+        }
       });
-      res.json({ proposal: response.choices[0].message.content || "Awaiting confirmation to modify system topology." });
+      res.json({ proposal: response.text || "Awaiting confirmation to modify system topology." });
     } catch (e) {
       console.error("Failed to generate proposal", e);
       res.status(500).json({ error: "Failed to generate proposal" });
@@ -103,15 +100,15 @@ If it has flaws, set isGood to false, provide a harsh but constructive critique,
 CRITICAL: You must return ONLY valid JSON.`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "grok-beta",
-        messages: [
-          { role: "system", content: systemInstruction },
-          { role: "user", content: `Manifesto: ${manifesto}\n\nCurrent Graph: ${JSON.stringify(graph)}\n\nAnalyze this architecture.` }
-        ],
-        response_format: { type: "json_object" }
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: `Manifesto: ${manifesto}\n\nCurrent Graph: ${JSON.stringify(graph)}\n\nAnalyze this architecture.`,
+        config: {
+          systemInstruction: systemInstruction,
+          responseMimeType: "application/json",
+        }
       });
-      const rawContent = response.choices[0].message.content || '{"isGood":true,"critique":"Failed to parse."}';
+      const rawContent = response.text || '{"isGood":true,"critique":"Failed to parse."}';
       res.json(JSON.parse(extractJSON(rawContent)));
     } catch (e) {
       console.error("Failed to analyze architecture", e);
@@ -132,14 +129,14 @@ You must synthesize information regarding:
 Format your response in clean Markdown.`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "grok-beta",
-        messages: [
-          { role: "system", content: systemInstruction },
-          { role: "user", content: `Project Context: ${projectContext}\n\nModule to Research:\nName: ${node.label}\nDescription: ${node.description}\nData Contract: ${node.data_contract || 'None'}\n\nPlease provide a deep research report for this module.` }
-        ]
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: `Project Context: ${projectContext}\n\nModule to Research:\nName: ${node.label}\nDescription: ${node.description}\nData Contract: ${node.data_contract || 'None'}\n\nPlease provide a deep research report for this module.`,
+        config: {
+          systemInstruction: systemInstruction,
+        }
       });
-      res.json({ research: response.choices[0].message.content || "Research failed." });
+      res.json({ research: response.text || "Research failed." });
     } catch (e) {
       console.error("Failed to perform deep research", e);
       res.status(500).json({ error: "Failed to perform deep research" });
