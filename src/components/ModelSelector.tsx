@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings2, ChevronDown, Zap, Globe, Loader2, Check, AlertTriangle } from 'lucide-react';
+import { Settings2, ChevronDown, Zap, Globe, Bot, Loader2, Check, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGraphStore } from '../store/useGraphStore';
 import { fetchProviders, fetchModels, switchProvider } from '../lib/api';
@@ -131,7 +131,12 @@ export default function ModelSelector() {
               <Zap size={14} className="text-accent" />
               <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-text-main">AI Configuration</span>
             </div>
-            {isLoading && <Loader2 size={12} className="animate-spin text-accent" />}
+            <div className="flex items-center gap-2">
+              {isLoading && <Loader2 size={12} className="animate-spin text-accent" />}
+              <button onClick={() => { setAvailableProviders([]); setAvailableModels([]); loadProviders(); }} className="text-text-dim hover:text-accent transition-colors cursor-pointer" title="Refresh providers & models">
+                <RefreshCw size={12} />
+              </button>
+            </div>
           </div>
 
           {/* Provider Section */}
@@ -157,13 +162,15 @@ export default function ModelSelector() {
                   <div className="flex items-center gap-2">
                     {p.name === 'xai' ? (
                       <Zap size={12} className={p.name === activeProvider ? 'text-accent' : 'text-text-dim'} />
+                    ) : p.name === 'openai' ? (
+                      <Bot size={12} className={p.name === activeProvider ? 'text-accent' : 'text-text-dim'} />
                     ) : (
                       <Globe size={12} className={p.name === activeProvider ? 'text-accent' : 'text-text-dim'} />
                     )}
                     <div>
                       <div className="text-[11px] font-bold">{p.label}</div>
                       <div className="text-[8px] opacity-60">
-                        {p.error ? 'Unavailable' : p.defaultModel || 'auto'}
+                        {p.error ? <span className="text-red-400">No API Key</span> : p.defaultModel || 'auto'}
                       </div>
                     </div>
                   </div>
