@@ -77,7 +77,50 @@ export function createBridgeProvider(): AIProvider {
 
     async listModels(): Promise<ModelInfo[]> {
       try {
-        // THE BRIDGE exposes GET /v1/models (OpenAI-compatible)
+        // First try the rich /api/providers endpoint for grouped models
+        const res = await fetch(`${BRIDGE_BASE_URL}/api/providers`);
+        if (res.ok) {
+          const data = await res.json() as {
+            providers: Array<{
+              id: string;
+              available: boolean;
+              models: string[];
+              defaultModel?: string;
+            }>;
+          };
+
+          const models: ModelInfo[] = [];
+          for (const p of data.providers) {
+            if (!p.available) continue;
+            for (const modelId of p.models) {
+              // Human-friendly label: "Copilot › gpt-5.4"
+              const providerLabel = p.id === 'github-copilot' ? 'Copilot'
+                : p.id === 'openai-codex' ? 'Codex'
+                : p.id;
+              const shortName = modelId.replace(`${p.id}/`, '');
+              models.push({
+                id: modelId,
+                name: `${providerLabel} › ${shortName}`,
+                provider: 'bridge',
+              });
+            }
+          }
+
+          // Also add the "thebridge/default" auto-router
+          models.push({
+            id: 'thebridge/default',
+            name: 'Bridge › auto (default)',
+            provider: 'bridge',
+          });
+
+          return models;
+        }
+      } catch (err) {
+        console.warn('[BRIDGE] /api/providers unavailable, trying /v1/models');
+      }
+
+      try {
+        // Fallback: standard OpenAI-compatible /v1/models
         const response = await client.models.list();
         const models: ModelInfo[] = [];
         for await (const model of response) {
@@ -90,10 +133,13 @@ export function createBridgeProvider(): AIProvider {
         return models;
       } catch (error) {
         console.warn('[BRIDGE] Failed to list models, returning defaults:', error);
-        // Fallback — known bridge provider models
+        // Static fallback — known bridge provider models
         return [
-          { id: 'github-copilot/gpt-5.4', name: 'Copilot GPT-5.4', provider: 'bridge' },
-          { id: 'openai-codex/codex', name: 'OpenAI Codex', provider: 'bridge' },
+          { id: 'github-copilot/gpt-4o', name: 'Copilot › gpt-4o', provider: 'bridge' },
+          { id: 'github-copilot/gpt-5.4', name: 'Copilot › gpt-5.4', provider: 'bridge' },
+          { id: 'openai-codex/gpt-5.4', name: 'Codex › gpt-5.4', provider: 'bridge' },
+          { id: 'openai-codex/gpt-5.4-mini', name: 'Codex › gpt-5.4-mini', provider: 'bridge' },
+          { id: 'thebridge/default', name: 'Bridge › auto (default)', provider: 'bridge' },
         ];
       }
     },
