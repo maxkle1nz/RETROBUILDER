@@ -9,8 +9,9 @@
   --color-text-main: #e0e6ed;
   --color-text-dim: #8892a0;
   --color-border-subtle: rgba(255, 255, 255, 0.08);
-  --font-sans: 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'Courier New', Courier, monospace;
+  --font-sans: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', Courier, monospace;
+  --font-display: 'Orbitron', 'Inter', sans-serif;
 }
 
 @layer utilities {
@@ -29,9 +30,14 @@
   }
   
   .scanlines {
-    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.25) 50%, rgba(0,0,0,0.25));
     background-size: 100% 4px;
     pointer-events: none;
+    mix-blend-mode: overlay;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
   }
 }
 
@@ -58,4 +64,30 @@
 .react-flow__handle-top { top: -4px; }
 .react-flow__handle-bottom { bottom: -4px; }
 
+/* Toast customization */
+.toast-container [data-sonner-toast] {
+  font-family: var(--font-mono);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-main);
+}
 
+/* M1ND mode override */
+[data-mode="m1nd"] {
+  --color-accent: #b026ff;
+  --color-accent-dim: rgba(176, 38, 255, 0.15);
+}
+
+/* Grid pulse background */
+@keyframes gridPulse {
+  0%, 100% { opacity: 0.03; }
+  50% { opacity: 0.06; }
+}
+
+.grid-pulse {
+  background-image: 
+    linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: gridPulse 4s ease-in-out infinite;
+}

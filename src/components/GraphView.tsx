@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -22,6 +22,7 @@ import { useStore } from 'zustand';
 
 import { useGraphStore } from '../store/useGraphStore';
 import CyberNode from './CyberNode';
+import NodeContextMenu from './NodeContextMenu';
 import { getLayoutedElements } from '../lib/layout';
 
 const nodeTypes = {
@@ -40,6 +41,9 @@ function Flow() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { fitView } = useReactFlow();
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string; nodeLabel: string } | null>(null);
 
   const handleAutoLayout = useCallback(() => {
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
@@ -99,8 +103,19 @@ function Flow() {
     useGraphStore.getState().openRightPanel();
   }, [setSelectedNode]);
 
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
+    event.preventDefault();
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      nodeId: node.id,
+      nodeLabel: (node.data as any)?.label || node.id,
+    });
+  }, []);
+
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
+    setContextMenu(null);
     useGraphStore.getState().closeRightPanel();
   }, [setSelectedNode]);
 
@@ -125,6 +140,7 @@ function Flow() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
@@ -160,6 +176,18 @@ function Flow() {
           className="bg-surface border border-accent/30 !rounded-none shadow-[0_0_15px_rgba(0,242,255,0.1)]"
           style={{ backgroundColor: '#050608' }}
         />
+
+        {/* MiniMap legend */}
+        <Panel position="bottom-right" className="mr-[10px] mb-[140px]">
+          <div className="bg-surface/90 border border-border-subtle rounded px-3 py-2 text-[8px] font-mono uppercase tracking-wider space-y-1">
+            <div className="flex items-center gap-2"><div className="w-2 h-2 bg-[#00f2ff]" /> Frontend</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 bg-[#b026ff]" /> Backend</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 bg-[#ff9d00]" /> Database</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 bg-[#ff003c]" /> Security</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 bg-[#00ff66]" /> External</div>
+          </div>
+        </Panel>
+
         <Panel position="top-left" className="flex gap-2">
           <button 
             onClick={() => undo()}
@@ -191,6 +219,17 @@ function Flow() {
           </button>
         </Panel>
       </ReactFlow>
+
+      {/* Node context menu */}
+      {contextMenu && (
+        <NodeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          nodeId={contextMenu.nodeId}
+          nodeLabel={contextMenu.nodeLabel}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </>
   );
 }

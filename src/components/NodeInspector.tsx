@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
 import { performDeepResearch } from '../lib/api';
 import { Loader2, Search, X, Save } from 'lucide-react';
+import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 
@@ -38,6 +39,7 @@ export default function NodeInspector() {
         data_contract: editContract,
         status: editStatus
       });
+      toast.success(`Saved: ${editLabel}`);
     }
   };
 
@@ -51,6 +53,7 @@ export default function NodeInspector() {
     } catch (error) {
       console.error("Research error:", error);
       setResearchResult("Failed to perform research. Please try again.");
+      toast.error('Deep research failed');
     } finally {
       setResearching(false);
     }

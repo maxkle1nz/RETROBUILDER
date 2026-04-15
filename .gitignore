@@ -6,4 +6,4 @@ coverage/
 *.log
 .env*
 !.env.example
-ingest_roots.json
+**/ingest_roots.json

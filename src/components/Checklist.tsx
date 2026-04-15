@@ -13,7 +13,7 @@ export default function Checklist() {
   const isOrgansDone = totalNodes > 0 && completedNodes === totalNodes;
   
   return (
-    <div className="w-[260px] h-full bg-surface border-r border-border-subtle flex flex-col text-text-main font-sans z-10 relative">
+    <div className="w-full h-full bg-surface border-r border-border-subtle flex flex-col text-text-main font-sans z-10 relative">
       <div className="text-[10px] uppercase tracking-[1.5px] p-4 text-text-dim border-b border-border-subtle">
         Project Skeleton (Retrobuilder)
       </div>

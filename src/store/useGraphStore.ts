@@ -31,6 +31,8 @@ interface GraphState {
   openRightPanel: () => void;
   closeRightPanel: () => void;
   updateNode: (id: string, updates: Partial<NodeData>) => void;
+  removeNode: (id: string) => void;
+  removeLink: (source: string, target: string) => void;
   addLink: (link: LinkData) => void;
   setHighlightedNodes: (nodeIds: string[], source: string | null) => void;
   clearHighlightedNodes: () => void;
@@ -67,6 +69,20 @@ export const useGraphStore = create<GraphState>()(
             nodes: state.graphData.nodes.map((n) => n.id === id ? { ...n, ...updates } : n)
           },
           selectedNode: state.selectedNode?.id === id ? { ...state.selectedNode, ...updates } : state.selectedNode
+        })),
+        removeNode: (id) => set((state) => ({
+          graphData: {
+            nodes: state.graphData.nodes.filter((n) => n.id !== id),
+            links: state.graphData.links.filter((l) => l.source !== id && l.target !== id)
+          },
+          selectedNode: state.selectedNode?.id === id ? null : state.selectedNode,
+          isRightPanelOpen: state.selectedNode?.id === id ? false : state.isRightPanelOpen
+        })),
+        removeLink: (source, target) => set((state) => ({
+          graphData: {
+            ...state.graphData,
+            links: state.graphData.links.filter((l) => !(l.source === source && l.target === target))
+          }
         })),
         addLink: (link) => set((state) => {
           const exists = state.graphData.links.some(l => l.source === link.source && l.target === link.target);

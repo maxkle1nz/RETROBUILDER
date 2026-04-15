@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
 import { analyzeArchitecture } from '../lib/api';
 import { Loader2, Search, CheckCircle2, Activity, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import NodeInspector from './NodeInspector';
@@ -25,6 +26,7 @@ export default function Sidebar() {
       setAnalysisResult(result);
     } catch (error) {
       console.error(error);
+      toast.error('Architecture analysis failed');
     } finally {
       setAnalyzing(false);
     }
@@ -38,7 +40,7 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="w-[320px] h-full bg-surface border-l border-border-subtle flex flex-col text-text-main font-sans z-10 relative">
+    <div className="w-full h-full bg-surface border-l border-border-subtle flex flex-col text-text-main font-sans z-10 relative">
       <AnimatePresence mode="wait">
         {selectedNode ? (
           <NodeInspector />
