@@ -53,6 +53,16 @@ export async function generateProposal(prompt: string, currentGraph: GraphData, 
   return data.proposal;
 }
 
+export async function applyProposal(prompt: string, currentGraph: GraphData, manifesto: string, proposal: string): Promise<GraphData> {
+  const res = await fetch("/api/ai/applyProposal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, currentGraph, manifesto, proposal })
+  });
+  if (!res.ok) throw new Error("Failed to apply proposal");
+  return res.json();
+}
+
 export async function analyzeArchitecture(graph: GraphData, manifesto: string): Promise<AnalysisResult> {
   const res = await fetch("/api/ai/analyzeArchitecture", {
     method: "POST",

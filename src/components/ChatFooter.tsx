@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
-import { generateGraphStructure, generateProposal } from '../lib/gemini';
-import { Send, Loader2, Terminal } from 'lucide-react';
+import { generateGraphStructure, generateProposal, applyProposal } from '../lib/gemini';
+import { Send, Loader2, Terminal, Check, X } from 'lucide-react';
 
 export default function ChatFooter() {
-  const { graphData, setGraphData, setManifesto, setArchitecture, manifesto, isGenerating, setIsGenerating, projectContext, setProjectContext, setPendingProposal } = useGraphStore();
+  const { graphData, setGraphData, setManifesto, setArchitecture, manifesto, isGenerating, setIsGenerating, projectContext, setProjectContext, pendingProposal, setPendingProposal } = useGraphStore();
   const [prompt, setPrompt] = useState('');
 
   const mode = graphData.nodes.length === 0 ? 'KONSTRUKTOR' : 'KREATOR';
@@ -37,12 +37,60 @@ export default function ChatFooter() {
     }
   };
 
+  const handleAcceptProposal = async () => {
+    if (!pendingProposal) return;
+    setIsGenerating(true);
+    try {
+      const newGraph = await applyProposal(pendingProposal.prompt, graphData, manifesto, pendingProposal.text);
+      if (newGraph && newGraph.nodes && newGraph.links) {
+        setGraphData(newGraph);
+      }
+      setPendingProposal(null);
+    } catch (error) {
+      console.error("Error applying proposal:", error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleRejectProposal = () => {
+    setPendingProposal(null);
+  };
+
   const totalNodes = graphData.nodes.length;
   const completedNodes = graphData.nodes.filter(n => n.status === 'completed').length;
   const progress = totalNodes > 0 ? Math.round((completedNodes / totalNodes) * 100) : 0;
 
   return (
-    <footer className="h-[120px] bg-surface border-t border-border-subtle p-4 px-6 flex gap-5 shrink-0 z-20">
+    <footer className="h-[120px] bg-surface border-t border-border-subtle p-4 px-6 flex gap-5 shrink-0 z-20 relative">
+      {pendingProposal && (
+        <div className="absolute bottom-full mb-4 left-6 right-6 bg-[#1a1f2b] border border-accent p-4 rounded-md shadow-[0_0_20px_rgba(0,255,204,0.15)] z-30">
+          <h4 className="text-accent text-[10px] font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+            <Terminal size={12} />
+            Pending Modification Proposal
+          </h4>
+          <p className="text-sm text-text-main mb-4 font-mono leading-relaxed">{pendingProposal.text}</p>
+          <div className="flex gap-3">
+            <button 
+              onClick={handleAcceptProposal} 
+              disabled={isGenerating}
+              className="flex items-center gap-2 bg-accent text-bg px-4 py-1.5 rounded text-[11px] font-bold uppercase hover:bg-white transition-colors disabled:opacity-50"
+            >
+              {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              Execute Plan
+            </button>
+            <button 
+              onClick={handleRejectProposal} 
+              disabled={isGenerating}
+              className="flex items-center gap-2 border border-border-subtle text-text-dim px-4 py-1.5 rounded text-[11px] font-bold uppercase hover:text-white hover:border-text-dim transition-colors disabled:opacity-50"
+            >
+              <X size={14} />
+              Abort
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 relative flex flex-col">
         <div className="absolute -top-7 left-0 flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest font-bold text-accent">
           <Terminal size={12} />

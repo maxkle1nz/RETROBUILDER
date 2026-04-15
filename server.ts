@@ -90,6 +90,33 @@ Keep it under 3 sentences. Be direct, authoritative, and analytical. Do not use 
     }
   });
 
+  app.post("/api/ai/applyProposal", async (req, res) => {
+    const { prompt, manifesto, currentGraph, proposal } = req.body;
+    const systemInstruction = `You are a master system architect.
+You are given the current system graph, a user prompt, and a proposal that was agreed upon.
+Your task is to output the NEW updated graph structure in JSON format.
+The output MUST be a valid JSON object with 'nodes' and 'links' arrays.
+Nodes must have: id, label, group, description, data_contract, status, type.
+Links must have: source, target, label.
+CRITICAL: Return ONLY valid JSON.`;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: `Current Graph: ${JSON.stringify(currentGraph)}\n\nUser Prompt: ${prompt}\n\nAgreed Proposal: ${proposal}\n\nGenerate the new graph JSON.`,
+        config: {
+          systemInstruction: systemInstruction,
+          responseMimeType: "application/json",
+        }
+      });
+      const rawContent = response.text || '{"nodes":[],"links":[]}';
+      res.json(JSON.parse(extractJSON(rawContent)));
+    } catch (e) {
+      console.error("Failed to apply proposal", e);
+      res.status(500).json({ error: "Failed to apply proposal" });
+    }
+  });
+
   app.post("/api/ai/analyzeArchitecture", async (req, res) => {
     const { graph, manifesto } = req.body;
     const systemInstruction = `You are the "Critic", a senior software architect auditor.
