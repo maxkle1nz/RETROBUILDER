@@ -6,13 +6,14 @@ import rateLimit from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createProvider, type AIProvider, type ChatMessage } from "./src/server/providers/index.js";
+import { createProvider, getProviderNames, PROVIDER_FACTORIES, type AIProvider, type ChatMessage } from "./src/server/providers/index.js";
 import { validateAIResponse, SystemStateSchema, GraphDataSchema, AnalysisResultSchema } from "./src/server/validation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ─── SSOT Provider Initialization ────────────────────────────────────
-const provider: AIProvider = createProvider();
+// Provider is now mutable — can be switched at runtime via API
+let provider: AIProvider = createProvider();
 
 function extractJSON(text: string): string {
   const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -34,20 +35,95 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
-  // --- API Routes ---
+  // --- Health & Config API Routes ---
   app.get("/api/health", (req, res) => {
     res.json({
       status: "ok",
       provider: provider.name,
       label: provider.label,
+      defaultModel: provider.defaultModel,
     });
+  });
+
+  // ─── Provider & Model Configuration ─────────────────────────────────
+  
+  /** List all available providers and their metadata */
+  app.get("/api/ai/providers", async (req, res) => {
+    const names = getProviderNames();
+    const providers = [];
+    
+    for (const name of names) {
+      try {
+        const p = PROVIDER_FACTORIES[name]();
+        providers.push({
+          name: p.name,
+          label: p.label,
+          defaultModel: p.defaultModel,
+          active: p.name === provider.name,
+        });
+      } catch (e: any) {
+        // Provider can't be created (e.g., missing API key)
+        providers.push({
+          name,
+          label: name,
+          defaultModel: null,
+          active: false,
+          error: e.message,
+        });
+      }
+    }
+    
+    res.json({ providers, active: provider.name });
+  });
+
+  /** List models for a specific provider (or active provider) */
+  app.get("/api/ai/models", async (req, res) => {
+    const targetProvider = req.query.provider as string | undefined;
+    
+    try {
+      let targetP = provider;
+      if (targetProvider && targetProvider !== provider.name) {
+        targetP = createProvider(targetProvider);
+      }
+      
+      const models = await targetP.listModels();
+      res.json({ 
+        provider: targetP.name,
+        defaultModel: targetP.defaultModel,
+        models 
+      });
+    } catch (e: any) {
+      console.error(`[SSOT] Failed to list models:`, e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /** Switch active provider at runtime */
+  app.post("/api/ai/switch-provider", (req, res) => {
+    const { provider: newProviderName } = req.body;
+    
+    if (!newProviderName || typeof newProviderName !== 'string') {
+      return res.status(400).json({ error: "Missing 'provider' field" });
+    }
+    
+    try {
+      provider = createProvider(newProviderName);
+      res.json({ 
+        success: true, 
+        provider: provider.name, 
+        label: provider.label,
+        defaultModel: provider.defaultModel,
+      });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
   });
 
   // Apply rate limiting to all AI endpoints
   app.use("/api/ai", aiLimiter);
 
   app.post("/api/ai/generateGraphStructure", async (req, res) => {
-    const { prompt, currentGraph, currentManifesto } = req.body;
+    const { prompt, currentGraph, currentManifesto, model } = req.body;
 
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: "Missing or invalid 'prompt' field." });
@@ -87,7 +163,7 @@ CRITICAL: You must return ONLY valid JSON.`
     ];
 
     try {
-      const rawContent = await provider.chatCompletion(messages, { jsonMode: true });
+      const rawContent = await provider.chatCompletion(messages, { jsonMode: true, model });
       const validated = validateAIResponse(extractJSON(rawContent), SystemStateSchema, 'generateGraphStructure');
       res.json(validated);
     } catch (e: any) {
@@ -97,7 +173,7 @@ CRITICAL: You must return ONLY valid JSON.`
   });
 
   app.post("/api/ai/generateProposal", async (req, res) => {
-    const { prompt, currentGraph, manifesto } = req.body;
+    const { prompt, currentGraph, manifesto, model } = req.body;
 
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: "Missing or invalid 'prompt' field." });
@@ -119,7 +195,7 @@ Keep it under 3 sentences. Be direct, authoritative, and analytical. Do not use 
     ];
 
     try {
-      const result = await provider.chatCompletion(messages);
+      const result = await provider.chatCompletion(messages, { model });
       res.json({ proposal: result || "Awaiting confirmation to modify system topology." });
     } catch (e: any) {
       console.error("[SSOT] Failed to generate proposal:", e.message);
@@ -128,7 +204,7 @@ Keep it under 3 sentences. Be direct, authoritative, and analytical. Do not use 
   });
 
   app.post("/api/ai/applyProposal", async (req, res) => {
-    const { prompt, manifesto, currentGraph, proposal } = req.body;
+    const { prompt, manifesto, currentGraph, proposal, model } = req.body;
 
     if (!prompt || !proposal) {
       return res.status(400).json({ error: "Missing 'prompt' or 'proposal' field." });
@@ -152,7 +228,7 @@ CRITICAL: Return ONLY valid JSON.`
     ];
 
     try {
-      const rawContent = await provider.chatCompletion(messages, { jsonMode: true });
+      const rawContent = await provider.chatCompletion(messages, { jsonMode: true, model });
       const validated = validateAIResponse(extractJSON(rawContent), GraphDataSchema, 'applyProposal');
       res.json(validated);
     } catch (e: any) {
@@ -162,7 +238,7 @@ CRITICAL: Return ONLY valid JSON.`
   });
 
   app.post("/api/ai/analyzeArchitecture", async (req, res) => {
-    const { graph, manifesto } = req.body;
+    const { graph, manifesto, model } = req.body;
 
     if (!graph || !graph.nodes) {
       return res.status(400).json({ error: "Missing or invalid 'graph' field." });
@@ -185,7 +261,7 @@ CRITICAL: You must return ONLY valid JSON.`
     ];
 
     try {
-      const rawContent = await provider.chatCompletion(messages, { jsonMode: true });
+      const rawContent = await provider.chatCompletion(messages, { jsonMode: true, model });
       const validated = validateAIResponse(extractJSON(rawContent), AnalysisResultSchema, 'analyzeArchitecture');
       res.json(validated);
     } catch (e: any) {
@@ -195,7 +271,7 @@ CRITICAL: You must return ONLY valid JSON.`
   });
 
   app.post("/api/ai/performDeepResearch", async (req, res) => {
-    const { node, projectContext } = req.body;
+    const { node, projectContext, model } = req.body;
 
     if (!node || !node.label) {
       return res.status(400).json({ error: "Missing or invalid 'node' field." });
@@ -221,7 +297,7 @@ Format your response in clean Markdown.`
     ];
 
     try {
-      const result = await provider.chatCompletion(messages);
+      const result = await provider.chatCompletion(messages, { model });
       res.json({ research: result || "Research failed." });
     } catch (e: any) {
       console.error("[SSOT] Failed to perform deep research:", e.message);
@@ -249,6 +325,7 @@ Format your response in clean Markdown.`
     console.log(`║    M1ND // RETROBUILDER                      ║`);
     console.log(`║    Server: http://localhost:${PORT}              ║`);
     console.log(`║    Provider: ${provider.label.padEnd(32)}║`);
+    console.log(`║    Model: ${provider.defaultModel.padEnd(35)}║`);
     console.log(`║    Rate Limit: 20 req/min per IP             ║`);
     console.log(`╚══════════════════════════════════════════════╝\n`);
   });

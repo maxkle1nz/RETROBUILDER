@@ -4,6 +4,7 @@ import { generateGraphStructure, generateProposal, applyProposal } from '../lib/
 import { m1nd } from '../lib/m1nd';
 import { Send, Loader2, Terminal, Check, X, BrainCircuit, Download, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import ModelSelector from './ModelSelector';
 
 interface ChatMessage {
   id: string;
@@ -228,17 +229,20 @@ export default function ChatFooter() {
 
       <div className="h-[100px] p-4 px-6 flex gap-5">
         <div className="flex-1 relative flex flex-col">
-          <div className={`absolute -top-7 left-0 flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest font-bold ${isM1ndMode ? 'text-[#b026ff]' : 'text-accent'}`}>
-            {isM1ndMode ? <BrainCircuit size={12} /> : <Terminal size={12} />}
-            <span>[ {mode} MODE ]</span>
-            {messages.length > 0 && (
-              <button 
-                onClick={() => setShowHistory(!showHistory)} 
-                className="text-text-dim hover:text-accent transition-colors ml-2 text-[9px]"
-              >
-                {showHistory ? '▼ HIDE' : '▲ HISTORY'} ({messages.length})
-              </button>
-            )}
+          <div className={`absolute -top-7 left-0 right-0 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest font-bold`}>
+            <div className={`flex items-center gap-2 ${isM1ndMode ? 'text-[#b026ff]' : 'text-accent'}`}>
+              {isM1ndMode ? <BrainCircuit size={12} /> : <Terminal size={12} />}
+              <span>[ {mode} MODE ]</span>
+              {messages.length > 0 && (
+                <button 
+                  onClick={() => setShowHistory(!showHistory)} 
+                  className="text-text-dim hover:text-accent transition-colors ml-2 text-[9px]"
+                >
+                  {showHistory ? '▼ HIDE' : '▲ HISTORY'} ({messages.length})
+                </button>
+              )}
+            </div>
+            <ModelSelector />
           </div>
           <textarea
             value={prompt}

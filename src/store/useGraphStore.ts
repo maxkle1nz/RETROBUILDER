@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { GraphData, NodeData, LinkData } from '../lib/api';
+import { GraphData, NodeData, LinkData, ProviderInfo, ModelInfo } from '../lib/api';
 
 export type AppMode = 'architect' | 'm1nd';
 
@@ -15,6 +15,12 @@ interface GraphState {
   pendingProposal: { text: string; prompt: string } | null;
   appMode: AppMode;
   isRightPanelOpen: boolean;
+
+  // AI Provider/Model Selection
+  activeProvider: string;
+  activeModel: string | null;
+  availableProviders: ProviderInfo[];
+  availableModels: ModelInfo[];
 
   // Blast radius highlighting — set of node IDs that are "illuminated"
   highlightedNodes: Set<string>;
@@ -36,6 +42,12 @@ interface GraphState {
   addLink: (link: LinkData) => void;
   setHighlightedNodes: (nodeIds: string[], source: string | null) => void;
   clearHighlightedNodes: () => void;
+
+  // Provider/Model actions
+  setActiveProvider: (provider: string) => void;
+  setActiveModel: (model: string | null) => void;
+  setAvailableProviders: (providers: ProviderInfo[]) => void;
+  setAvailableModels: (models: ModelInfo[]) => void;
 }
 
 export const useGraphStore = create<GraphState>()(
@@ -53,6 +65,10 @@ export const useGraphStore = create<GraphState>()(
         isRightPanelOpen: false,
         highlightedNodes: new Set<string>(),
         highlightSource: null,
+        activeProvider: 'xai',
+        activeModel: null,
+        availableProviders: [],
+        availableModels: [],
         setGraphData: (data) => set({ graphData: data }),
         setManifesto: (manifesto) => set({ manifesto }),
         setArchitecture: (architecture) => set({ architecture }),
@@ -102,6 +118,10 @@ export const useGraphStore = create<GraphState>()(
           highlightedNodes: new Set<string>(),
           highlightSource: null
         }),
+        setActiveProvider: (provider) => set({ activeProvider: provider }),
+        setActiveModel: (model) => set({ activeModel: model }),
+        setAvailableProviders: (providers) => set({ availableProviders: providers }),
+        setAvailableModels: (models) => set({ availableModels: models }),
       }),
       {
         partialize: (state) => ({
@@ -120,6 +140,8 @@ export const useGraphStore = create<GraphState>()(
         architecture: state.architecture,
         projectContext: state.projectContext,
         appMode: state.appMode,
+        activeProvider: state.activeProvider,
+        activeModel: state.activeModel,
       }),
     }
   )

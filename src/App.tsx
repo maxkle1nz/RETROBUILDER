@@ -12,6 +12,7 @@ import ProposalModal from './components/ProposalModal';
 import RightPanel from './components/RightPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useGraphStore } from './store/useGraphStore';
+import { registerModelGetter } from './lib/api';
 import { BrainCircuit, PenTool, PanelRightClose, PanelLeftClose } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Toaster, toast } from 'sonner';
@@ -37,6 +38,11 @@ export default function App() {
   const totalNodes = graphData.nodes.length;
   const completedNodes = graphData.nodes.filter(n => n.status === 'completed').length;
   const syncPct = totalNodes > 0 ? Math.round((completedNodes / totalNodes) * 100) : 0;
+
+  // Register model getter so all API calls include user's model selection
+  useEffect(() => {
+    registerModelGetter(() => useGraphStore.getState().activeModel);
+  }, []);
 
   // Global keyboard shortcuts
   useEffect(() => {

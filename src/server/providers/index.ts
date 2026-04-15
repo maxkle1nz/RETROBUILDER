@@ -3,9 +3,9 @@
  * 
  * Single Source of Truth for all AI provider integrations.
  * Each provider implements the same contract — swap backends
- * by changing AI_PROVIDER env var.
+ * by changing AI_PROVIDER env var or at runtime via API.
  * 
- * Supported: xai, bridge, openai
+ * Supported: xai, bridge
  */
 
 export interface ChatMessage {
@@ -24,13 +24,23 @@ export interface CompletionConfig {
   temperature?: number;
 }
 
+export interface ModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+}
+
 export interface AIProvider {
   /** Provider identifier */
   readonly name: string;
   /** Human-readable label */
   readonly label: string;
+  /** Default model for this provider */
+  readonly defaultModel: string;
   /** Run a chat completion and return the text response */
   chatCompletion(messages: ChatMessage[], config?: CompletionConfig): Promise<string>;
+  /** List available models for this provider */
+  listModels(): Promise<ModelInfo[]>;
 }
 
 // ─── Provider Registry ───────────────────────────────────────────────
@@ -38,7 +48,7 @@ export interface AIProvider {
 import { createXAIProvider } from './xai.js';
 import { createBridgeProvider } from './bridge.js';
 
-const PROVIDER_FACTORIES: Record<string, () => AIProvider> = {
+export const PROVIDER_FACTORIES: Record<string, () => AIProvider> = {
   xai: createXAIProvider,
   bridge: createBridgeProvider,
 };
@@ -61,4 +71,11 @@ export function createProvider(name?: string): AIProvider {
   const provider = factory();
   console.log(`[SSOT] AI Provider initialized: ${provider.label} (${provider.name})`);
   return provider;
+}
+
+/**
+ * Get list of all registered provider names.
+ */
+export function getProviderNames(): string[] {
+  return Object.keys(PROVIDER_FACTORIES);
 }

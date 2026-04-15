@@ -7,13 +7,18 @@
  * Default: http://127.0.0.1:7788/v1
  * No API key needed — THEBRIDGE handles auth reuse from local credentials.
  * 
+ * Providers discovered:
+ *   - openai-codex → local Codex auth
+ *   - github-copilot → OpenClaw/Copilot token exchange
+ * 
  * @see https://github.com/maxkle1nz/thebridge
  */
 
 import OpenAI from 'openai';
-import type { AIProvider, ChatMessage, CompletionConfig } from './index.js';
+import type { AIProvider, ChatMessage, CompletionConfig, ModelInfo } from './index.js';
 
 const BRIDGE_DEFAULT_URL = process.env.THEBRIDGE_URL || 'http://127.0.0.1:7788/v1';
+const BRIDGE_BASE_URL = BRIDGE_DEFAULT_URL.replace(/\/v1$/, '');
 const BRIDGE_DEFAULT_MODEL = process.env.THEBRIDGE_MODEL || 'github-copilot/gpt-5.4';
 
 export function createBridgeProvider(): AIProvider {
@@ -25,6 +30,7 @@ export function createBridgeProvider(): AIProvider {
   return {
     name: 'bridge',
     label: 'THE BRIDGE (Local)',
+    defaultModel: BRIDGE_DEFAULT_MODEL,
 
     async chatCompletion(
       messages: ChatMessage[],
@@ -38,7 +44,7 @@ export function createBridgeProvider(): AIProvider {
           role: m.role,
           content: m.content,
         })),
-        max_tokens: config?.maxTokens || 8192,
+        max_tokens: config?.maxTokens || 16384,
         temperature: config?.temperature ?? 0.7,
       };
 
@@ -66,6 +72,29 @@ export function createBridgeProvider(): AIProvider {
           return response.choices?.[0]?.message?.content || '';
         }
         throw error;
+      }
+    },
+
+    async listModels(): Promise<ModelInfo[]> {
+      try {
+        // THE BRIDGE exposes GET /v1/models (OpenAI-compatible)
+        const response = await client.models.list();
+        const models: ModelInfo[] = [];
+        for await (const model of response) {
+          models.push({
+            id: model.id,
+            name: model.id,
+            provider: 'bridge',
+          });
+        }
+        return models;
+      } catch (error) {
+        console.warn('[BRIDGE] Failed to list models, returning defaults:', error);
+        // Fallback — known bridge provider models
+        return [
+          { id: 'github-copilot/gpt-5.4', name: 'Copilot GPT-5.4', provider: 'bridge' },
+          { id: 'openai-codex/codex', name: 'OpenAI Codex', provider: 'bridge' },
+        ];
       }
     },
   };

@@ -6,7 +6,7 @@
  */
 
 import OpenAI from 'openai';
-import type { AIProvider, ChatMessage, CompletionConfig } from './index.js';
+import type { AIProvider, ChatMessage, CompletionConfig, ModelInfo } from './index.js';
 
 const XAI_BASE_URL = 'https://api.x.ai/v1';
 const XAI_DEFAULT_MODEL = process.env.XAI_MODEL || 'grok-4.20-non-reasoning';
@@ -28,6 +28,7 @@ export function createXAIProvider(): AIProvider {
   return {
     name: 'xai',
     label: 'xAI Grok',
+    defaultModel: XAI_DEFAULT_MODEL,
 
     async chatCompletion(
       messages: ChatMessage[],
@@ -58,6 +59,30 @@ export function createXAIProvider(): AIProvider {
       }
 
       return content;
+    },
+
+    async listModels(): Promise<ModelInfo[]> {
+      try {
+        const response = await client.models.list();
+        const models: ModelInfo[] = [];
+        for await (const model of response) {
+          models.push({
+            id: model.id,
+            name: model.id,
+            provider: 'xai',
+          });
+        }
+        return models;
+      } catch (error) {
+        console.warn('[xAI] Failed to list models, returning defaults:', error);
+        // Fallback — known xAI models
+        return [
+          { id: 'grok-4.20-non-reasoning', name: 'Grok 4.20', provider: 'xai' },
+          { id: 'grok-4.20-reasoning', name: 'Grok 4.20 Reasoning', provider: 'xai' },
+          { id: 'grok-4.1-fast-non-reasoning', name: 'Grok 4.1 Fast', provider: 'xai' },
+          { id: 'grok-4.1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning', provider: 'xai' },
+        ];
+      }
     },
   };
 }
