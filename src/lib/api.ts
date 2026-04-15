@@ -1,3 +1,10 @@
+/**
+ * RETROBUILDER API Client
+ * 
+ * Frontend API functions for communicating with the Express backend.
+ * Provider-agnostic — the backend handles AI provider selection via SSOT.
+ */
+
 export interface NodeData {
   id: string;
   label: string;
@@ -83,4 +90,3 @@ export async function performDeepResearch(node: NodeData, projectContext: string
   const data = await res.json();
   return data.research;
 }
-

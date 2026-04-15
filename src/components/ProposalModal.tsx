@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGraphStore } from '../store/useGraphStore';
-import { generateGraphStructure } from '../lib/gemini';
+import { generateGraphStructure } from '../lib/api';
 import { motion } from 'motion/react';
 import { Terminal, Check, X, Loader2 } from 'lucide-react';
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
-import { GraphData, NodeData, LinkData } from '../lib/gemini';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { GraphData, NodeData, LinkData } from '../lib/api';
 
 export type AppMode = 'architect' | 'm1nd';
 
@@ -14,6 +15,11 @@ interface GraphState {
   pendingProposal: { text: string; prompt: string } | null;
   appMode: AppMode;
   isRightPanelOpen: boolean;
+
+  // Blast radius highlighting — set of node IDs that are "illuminated"
+  highlightedNodes: Set<string>;
+  highlightSource: string | null; // which node triggered the highlight
+
   setGraphData: (data: GraphData) => void;
   setManifesto: (manifesto: string) => void;
   setArchitecture: (architecture: string) => void;
@@ -26,55 +32,79 @@ interface GraphState {
   closeRightPanel: () => void;
   updateNode: (id: string, updates: Partial<NodeData>) => void;
   addLink: (link: LinkData) => void;
+  setHighlightedNodes: (nodeIds: string[], source: string | null) => void;
+  clearHighlightedNodes: () => void;
 }
 
 export const useGraphStore = create<GraphState>()(
-  temporal(
-    (set) => ({
-      graphData: { nodes: [], links: [] },
-      manifesto: '',
-      architecture: '',
-      selectedNode: null,
-      isGenerating: false,
-      projectContext: '',
-      pendingProposal: null,
-      appMode: 'architect',
-      isRightPanelOpen: false,
-      setGraphData: (data) => set({ graphData: data }),
-      setManifesto: (manifesto) => set({ manifesto }),
-      setArchitecture: (architecture) => set({ architecture }),
-      setSelectedNode: (node) => set({ selectedNode: node }),
-      setIsGenerating: (isGenerating) => set({ isGenerating }),
-      setProjectContext: (context) => set({ projectContext: context }),
-      setPendingProposal: (proposal) => set({ pendingProposal: proposal }),
-      setAppMode: (mode) => set({ appMode: mode }),
-      openRightPanel: () => set({ isRightPanelOpen: true }),
-      closeRightPanel: () => set({ isRightPanelOpen: false }),
-      updateNode: (id, updates) => set((state) => ({
-        graphData: {
-          ...state.graphData,
-          nodes: state.graphData.nodes.map((n) => n.id === id ? { ...n, ...updates } : n)
-        },
-        selectedNode: state.selectedNode?.id === id ? { ...state.selectedNode, ...updates } : state.selectedNode
-      })),
-      addLink: (link) => set((state) => {
-        // Prevent duplicate links
-        const exists = state.graphData.links.some(l => l.source === link.source && l.target === link.target);
-        if (exists) return state;
-        return {
+  persist(
+    temporal(
+      (set) => ({
+        graphData: { nodes: [], links: [] },
+        manifesto: '',
+        architecture: '',
+        selectedNode: null,
+        isGenerating: false,
+        projectContext: '',
+        pendingProposal: null,
+        appMode: 'architect',
+        isRightPanelOpen: false,
+        highlightedNodes: new Set<string>(),
+        highlightSource: null,
+        setGraphData: (data) => set({ graphData: data }),
+        setManifesto: (manifesto) => set({ manifesto }),
+        setArchitecture: (architecture) => set({ architecture }),
+        setSelectedNode: (node) => set({ selectedNode: node }),
+        setIsGenerating: (isGenerating) => set({ isGenerating }),
+        setProjectContext: (context) => set({ projectContext: context }),
+        setPendingProposal: (proposal) => set({ pendingProposal: proposal }),
+        setAppMode: (mode) => set({ appMode: mode }),
+        openRightPanel: () => set({ isRightPanelOpen: true }),
+        closeRightPanel: () => set({ isRightPanelOpen: false }),
+        updateNode: (id, updates) => set((state) => ({
           graphData: {
             ...state.graphData,
-            links: [...state.graphData.links, link]
-          }
-        };
-      })
-    }),
+            nodes: state.graphData.nodes.map((n) => n.id === id ? { ...n, ...updates } : n)
+          },
+          selectedNode: state.selectedNode?.id === id ? { ...state.selectedNode, ...updates } : state.selectedNode
+        })),
+        addLink: (link) => set((state) => {
+          const exists = state.graphData.links.some(l => l.source === link.source && l.target === link.target);
+          if (exists) return state;
+          return {
+            graphData: {
+              ...state.graphData,
+              links: [...state.graphData.links, link]
+            }
+          };
+        }),
+        setHighlightedNodes: (nodeIds, source) => set({ 
+          highlightedNodes: new Set(nodeIds),
+          highlightSource: source
+        }),
+        clearHighlightedNodes: () => set({ 
+          highlightedNodes: new Set<string>(),
+          highlightSource: null
+        }),
+      }),
+      {
+        partialize: (state) => ({
+          graphData: state.graphData,
+          manifesto: state.manifesto,
+          architecture: state.architecture
+        })
+      }
+    ),
     {
+      name: 'retrobuilder-state',
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         graphData: state.graphData,
         manifesto: state.manifesto,
-        architecture: state.architecture
-      })
+        architecture: state.architecture,
+        projectContext: state.projectContext,
+        appMode: state.appMode,
+      }),
     }
   )
 );

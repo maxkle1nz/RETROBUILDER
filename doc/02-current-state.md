@@ -12,15 +12,18 @@ As of the latest development phase, the following features and components have b
 - **Chat Footer (KREATOR/KONSTRUKTOR):** A command interface for interacting with the AI. It adapts its prompt based on whether the graph is empty (Konstruktor) or already populated (Kreator).
 
 ## 2. Backend API (Express)
-- **Secure API Gateway:** An Express.js server (`server.ts`) handles all external API calls, ensuring that sensitive keys (like `GEMINI_API_KEY`) are never exposed to the client browser.
+- **Secure API Gateway:** An Express.js server (`server.ts`) handles all external API calls, ensuring that sensitive keys (like `XAI_API_KEY`) are never exposed to the client browser.
 - **AI Endpoints:**
   - `/api/ai/generateGraphStructure`: Parses user prompts to generate initial DAG structures, manifestos, and architecture documents.
   - `/api/ai/generateProposal`: Analyzes requests to modify an existing graph and returns a concise modification plan.
   - `/api/ai/analyzeArchitecture`: Audits the current graph for flaws, security risks, and missing components.
   - `/api/ai/performDeepResearch`: Conducts deep research on a specific module, finding GitHub donors, trends, and documentation.
 
-## 3. AI Integration (Google Gemini)
-- Successfully migrated from xAI Grok to **Google Gemini 2.5 Pro** using the `@google/genai` SDK.
+## 3. AI Integration (SSOT Provider Layer)
+- Migrated from Google Gemini to a **SSOT Provider Architecture** using the `openai` npm package.
+- **Active Provider:** xAI Grok (`grok-3-mini`) via `https://api.x.ai/v1`.
+- **Secondary Provider:** THE BRIDGE (local proxy) via `http://127.0.0.1:7788/v1` for Codex/Copilot access.
+- Provider selection via `AI_PROVIDER` environment variable (`xai` | `bridge`).
 - The backend uses structured JSON output formatting to ensure the AI returns valid graph data that the frontend can render immediately.
 
 ## 4. m1nd Engine Integration

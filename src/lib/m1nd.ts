@@ -61,6 +61,23 @@ export class M1ndClient {
     });
   }
 
+  /**
+   * Disconnect from the MCP proxy and clean up pending requests
+   */
+  disconnect(): void {
+    if (this.ws) {
+      // Reject all pending requests
+      for (const [id, { reject }] of this.pendingRequests) {
+        reject(new Error('m1nd client disconnected'));
+      }
+      this.pendingRequests.clear();
+
+      this.ws.close();
+      this.ws = null;
+      console.log("[m1nd] Disconnected from MCP proxy");
+    }
+  }
+
   private async callTool(name: string, args: any): Promise<any> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("m1nd client not connected");

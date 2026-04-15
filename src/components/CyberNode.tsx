@@ -1,9 +1,16 @@
 import React from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { NodeData } from '../lib/gemini';
+import { NodeData } from '../lib/api';
+import { useGraphStore } from '../store/useGraphStore';
 import { CheckCircle2, Circle, PlayCircle, Database, Layout, Server, Shield, Globe } from 'lucide-react';
 
 export default function CyberNode({ data, selected }: NodeProps<NodeData>) {
+  const highlightedNodes = useGraphStore((s) => s.highlightedNodes);
+  const highlightSource = useGraphStore((s) => s.highlightSource);
+  
+  const isHighlighted = highlightedNodes.has(data.id);
+  const isBlastSource = highlightSource === data.id;
+
   // Determine colors based on type
   let typeColor = 'var(--color-text-dim)';
   let TypeIcon = Server;
@@ -34,11 +41,35 @@ export default function CyberNode({ data, selected }: NodeProps<NodeData>) {
   const isCompleted = data.status === 'completed';
   const isInProgress = data.status === 'in-progress';
 
+  // Blast radius visual styling
+  let borderColor = selected ? 'var(--color-accent)' : 'var(--color-border-subtle)';
+  let shadowClass = selected ? 'shadow-[0_0_20px_rgba(0,242,255,0.2)] z-10' : 'shadow-lg z-0';
+  
+  if (isBlastSource) {
+    borderColor = '#ff003c';
+    shadowClass = 'shadow-[0_0_30px_rgba(255,0,60,0.5)] z-20 animate-pulse';
+  } else if (isHighlighted) {
+    borderColor = '#ff9d00';
+    shadowClass = 'shadow-[0_0_20px_rgba(255,157,0,0.3)] z-10';
+  }
+
   return (
     <div 
-      className={`relative min-w-[200px] bg-[rgba(16,18,24,0.95)] border backdrop-blur-md transition-all duration-300 ${selected ? 'shadow-[0_0_20px_rgba(0,242,255,0.2)] z-10' : 'shadow-lg z-0'}`}
-      style={{ borderColor: selected ? 'var(--color-accent)' : 'var(--color-border-subtle)' }}
+      className={`relative min-w-[200px] bg-[rgba(16,18,24,0.95)] border backdrop-blur-md transition-all duration-300 ${shadowClass}`}
+      style={{ borderColor }}
     >
+      {/* Blast radius badge */}
+      {isBlastSource && (
+        <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[8px] bg-[#ff003c] text-white px-2 py-0.5 rounded-full uppercase tracking-widest whitespace-nowrap z-30">
+          ⚡ Blast Origin
+        </div>
+      )}
+      {isHighlighted && !isBlastSource && (
+        <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[8px] bg-[#ff9d00] text-bg px-2 py-0.5 rounded-full uppercase tracking-widest whitespace-nowrap z-30">
+          Impact Zone
+        </div>
+      )}
+
       {/* Target Handle (Input) */}
       <Handle 
         type="target" 
