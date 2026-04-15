@@ -1,0 +1,96 @@
+import React from 'react';
+import { Handle, Position, NodeProps } from '@xyflow/react';
+import { NodeData } from '../lib/gemini';
+import { CheckCircle2, Circle, PlayCircle, Database, Layout, Server, Shield, Globe } from 'lucide-react';
+
+export default function CyberNode({ data, selected }: NodeProps<NodeData>) {
+  // Determine colors based on type
+  let typeColor = 'var(--color-text-dim)';
+  let TypeIcon = Server;
+  
+  switch (data.type) {
+    case 'frontend':
+      typeColor = '#00f2ff'; // Cyan
+      TypeIcon = Layout;
+      break;
+    case 'backend':
+      typeColor = '#b026ff'; // Purple
+      TypeIcon = Server;
+      break;
+    case 'database':
+      typeColor = '#ff9d00'; // Orange
+      TypeIcon = Database;
+      break;
+    case 'security':
+      typeColor = '#ff003c'; // Red
+      TypeIcon = Shield;
+      break;
+    case 'external':
+      typeColor = '#00ff66'; // Green
+      TypeIcon = Globe;
+      break;
+  }
+
+  const isCompleted = data.status === 'completed';
+  const isInProgress = data.status === 'in-progress';
+
+  return (
+    <div 
+      className={`relative min-w-[200px] bg-[rgba(16,18,24,0.95)] border backdrop-blur-md transition-all duration-300 ${selected ? 'shadow-[0_0_20px_rgba(0,242,255,0.2)] z-10' : 'shadow-lg z-0'}`}
+      style={{ borderColor: selected ? 'var(--color-accent)' : 'var(--color-border-subtle)' }}
+    >
+      {/* Target Handle (Input) */}
+      <Handle 
+        type="target" 
+        position={Position.Top} 
+        className="w-2 h-2 !bg-bg !border-[1.5px] rounded-none"
+        style={{ borderColor: typeColor }}
+      />
+
+      {/* Header */}
+      <div className="flex items-center justify-between p-2 border-b border-border-subtle bg-[rgba(255,255,255,0.02)]">
+        <div className="flex items-center gap-2">
+          <TypeIcon size={12} style={{ color: typeColor }} />
+          <span className="text-[10px] uppercase font-mono tracking-widest" style={{ color: typeColor }}>
+            {data.type || 'module'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {isCompleted && <CheckCircle2 size={12} style={{ color: typeColor }} />}
+          {isInProgress && <PlayCircle size={12} className="text-text-dim" />}
+          {!isCompleted && !isInProgress && <Circle size={12} className="text-text-dim" />}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="p-3">
+        <h3 className="text-[13px] font-bold text-text-main mb-1 truncate">{data.label}</h3>
+        <p className="text-[10px] text-text-dim leading-tight line-clamp-2 font-mono">
+          {data.description}
+        </p>
+      </div>
+
+      {/* Footer / Data Contract */}
+      {data.data_contract && (
+        <div className="px-3 py-2 border-t border-border-subtle bg-[rgba(0,0,0,0.3)]">
+          <div className="text-[8px] uppercase text-text-dim mb-1 tracking-widest">Data Contract</div>
+          <div className="text-[9px] text-accent-dim font-mono truncate">
+            {data.data_contract}
+          </div>
+        </div>
+      )}
+
+      {/* Source Handle (Output) */}
+      <Handle 
+        type="source" 
+        position={Position.Bottom} 
+        className="w-2 h-2 !bg-bg !border-[1.5px] rounded-none"
+        style={{ borderColor: typeColor }}
+      />
+      
+      {/* Cyberpunk Decorative Elements */}
+      <div className="absolute top-0 left-0 w-2 h-2 border-t border-l" style={{ borderColor: typeColor }} />
+      <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r" style={{ borderColor: typeColor }} />
+    </div>
+  );
+}

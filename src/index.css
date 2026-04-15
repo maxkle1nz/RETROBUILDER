@@ -1,0 +1,61 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-bg: #050608;
+  --color-surface: #101218;
+  --color-accent: #00f2ff;
+  --color-accent-dim: rgba(0, 242, 255, 0.15);
+  --color-text-main: #e0e6ed;
+  --color-text-dim: #8892a0;
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --font-sans: 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Courier New', Courier, monospace;
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: var(--color-border-subtle);
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-text-dim);
+  }
+  
+  .scanlines {
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+    background-size: 100% 4px;
+    pointer-events: none;
+  }
+}
+
+/* React Flow Customizations */
+.react-flow__edge-path {
+  stroke-width: 1.5;
+}
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 4 4;
+  animation: dashdraw 0.5s linear infinite;
+}
+@keyframes dashdraw {
+  from { stroke-dashoffset: 8; }
+  to { stroke-dashoffset: 0; }
+}
+
+.react-flow__handle {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-text-dim);
+}
+.react-flow__handle-top { top: -4px; }
+.react-flow__handle-bottom { bottom: -4px; }
+
+
