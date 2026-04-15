@@ -135,8 +135,12 @@ export function createBridgeProvider(): AIProvider {
         console.warn('[BRIDGE] Failed to list models, returning defaults:', error);
         // Static fallback — known bridge provider models
         return [
-          { id: 'github-copilot/gpt-4o', name: 'Copilot › gpt-4o', provider: 'bridge' },
+          { id: 'github-copilot/claude-opus-4.6', name: 'Copilot › Claude Opus 4.6', provider: 'bridge' },
+          { id: 'github-copilot/claude-sonnet-4.6', name: 'Copilot › Claude Sonnet 4.6', provider: 'bridge' },
+          { id: 'github-copilot/claude-sonnet-4', name: 'Copilot › Claude Sonnet 4', provider: 'bridge' },
+          { id: 'github-copilot/gemini-2.5-pro', name: 'Copilot › Gemini 2.5 Pro', provider: 'bridge' },
           { id: 'github-copilot/gpt-5.4', name: 'Copilot › gpt-5.4', provider: 'bridge' },
+          { id: 'github-copilot/gpt-4o', name: 'Copilot › gpt-4o', provider: 'bridge' },
           { id: 'openai-codex/gpt-5.4', name: 'Codex › gpt-5.4', provider: 'bridge' },
           { id: 'openai-codex/gpt-5.4-mini', name: 'Codex › gpt-5.4-mini', provider: 'bridge' },
           { id: 'thebridge/default', name: 'Bridge › auto (default)', provider: 'bridge' },
