@@ -16,6 +16,9 @@ export interface NodeData {
   type: 'frontend' | 'backend' | 'database' | 'external' | 'security';
   data_contract?: string;
   decision_rationale?: string;
+  acceptance_criteria?: string[];
+  error_handling?: string[];
+  priority?: number;
   group: number;
 }
 
@@ -146,4 +149,14 @@ export async function performDeepResearch(node: NodeData, projectContext: string
   if (!res.ok) throw new Error("Failed to perform deep research");
   const data = await res.json();
   return data.research;
+}
+
+export async function exportToOmx(graph: GraphData, manifesto: string, architecture: string): Promise<{ plan: string; agents: string }> {
+  const res = await fetch("/api/export/omx", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ graph, manifesto, architecture })
+  });
+  if (!res.ok) throw new Error("Failed to export to OMX format");
+  return res.json();
 }
