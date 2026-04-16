@@ -239,8 +239,7 @@ MIT — see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-Built with conviction by [maxkle1nz](https://github.com/maxkle1nz)
+Built by [maxkle1nz](https://github.com/maxkle1nz)
 
-*"Design the system. Then build the system. Never the other way around."*
 
 </div>
