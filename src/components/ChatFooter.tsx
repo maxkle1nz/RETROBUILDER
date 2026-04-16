@@ -41,7 +41,8 @@ export default function ChatFooter() {
   const historyRef = useRef<HTMLDivElement>(null);
 
   const isM1ndMode = appMode === 'm1nd';
-  const mode = isM1ndMode ? 'M1ND' : (graphData.nodes.length === 0 ? 'KONSTRUKTOR' : 'KREATOR');
+  const isBuilderMode = appMode === 'builder';
+  const mode = isBuilderMode ? 'BU1LDER' : isM1ndMode ? 'M1ND' : (graphData.nodes.length === 0 ? 'KONSTRUKTOR' : 'KREATOR');
 
   // Check m1nd health
   useEffect(() => {
@@ -273,7 +274,7 @@ export default function ChatFooter() {
       <div className="h-[100px] p-4 px-6 flex gap-5">
         <div className="flex-1 relative flex flex-col">
           <div className={`absolute -top-7 left-0 right-0 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest font-bold`}>
-            <div className={`flex items-center gap-2 ${isM1ndMode ? 'text-[#b026ff]' : 'text-accent'}`}>
+            <div className={`flex items-center gap-2 ${isBuilderMode ? 'text-[#50fa7b]' : isM1ndMode ? 'text-[#b026ff]' : 'text-accent'}`}>
               {isM1ndMode ? <BrainCircuit size={12} /> : <Terminal size={12} />}
               <span>[ {mode} MODE ]</span>
               {m1ndOnline && isM1ndMode && (
@@ -309,18 +310,22 @@ export default function ChatFooter() {
                   : "Ask to modify the graph topology or explain behavior..."
             }
             className={`w-full h-full bg-bg border rounded-lg p-3 text-text-main font-mono text-[12px] resize-none outline-none custom-scrollbar transition-all duration-300 ${
-              isM1ndMode 
-                ? 'border-[#b026ff]/30 focus:border-[#b026ff] focus:shadow-[0_0_12px_rgba(176,38,255,0.2)]' 
-                : 'border-border-subtle focus:border-accent focus:shadow-[0_0_12px_rgba(0,242,255,0.15)]'
+              isBuilderMode
+                ? 'border-[#50fa7b]/30 focus:border-[#50fa7b] focus:shadow-[0_0_12px_rgba(80,250,123,0.2)]'
+                : isM1ndMode 
+                  ? 'border-[#b026ff]/30 focus:border-[#b026ff] focus:shadow-[0_0_12px_rgba(176,38,255,0.2)]' 
+                  : 'border-border-subtle focus:border-accent focus:shadow-[0_0_12px_rgba(0,242,255,0.15)]'
             }`}
           />
           <button 
             onClick={handleGenerate}
             disabled={isGenerating || !prompt.trim()}
             className={`absolute bottom-3 right-3 p-1.5 disabled:opacity-50 rounded transition-colors cursor-pointer ${
-              isM1ndMode 
-                ? 'bg-[#b026ff]/20 text-[#b026ff] hover:bg-[#b026ff] hover:text-bg' 
-                : 'bg-accent-dim text-accent hover:bg-accent hover:text-bg'
+              isBuilderMode
+                ? 'bg-[#50fa7b]/20 text-[#50fa7b] hover:bg-[#50fa7b] hover:text-bg'
+                : isM1ndMode 
+                  ? 'bg-[#b026ff]/20 text-[#b026ff] hover:bg-[#b026ff] hover:text-bg' 
+                  : 'bg-accent-dim text-accent hover:bg-accent hover:text-bg'
             }`}
           >
             {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}

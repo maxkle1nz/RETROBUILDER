@@ -106,3 +106,34 @@
     linear-gradient(rgba(176, 38, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(176, 38, 255, 0.03) 1px, transparent 1px);
 }
+
+/* BU1LDER mode override — green accent */
+[data-mode="builder"] {
+  --color-accent: #50fa7b;
+  --color-accent-dim: rgba(80, 250, 123, 0.15);
+}
+
+/* Builder mode grid pulse — switches to green */
+[data-mode="builder"] .grid-pulse {
+  background-image: 
+    linear-gradient(rgba(80, 250, 123, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(80, 250, 123, 0.02) 1px, transparent 1px);
+}
+
+/* Build node shimmer */
+@keyframes buildShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Propagation ring burst */
+@keyframes propagationRing {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* Build progress glow */
+@keyframes buildGlow {
+  0%, 100% { box-shadow: 0 0 4px var(--color-accent); }
+  50% { box-shadow: 0 0 12px var(--color-accent); }
+}

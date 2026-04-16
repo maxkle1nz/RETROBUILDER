@@ -15,7 +15,7 @@ import SessionLauncher from './components/SessionLauncher';
 import EnvConfigModal from './components/EnvConfigModal';
 import { useGraphStore } from './store/useGraphStore';
 import { fetchEnvConfig, listSessions, loadSession, registerModelGetter, saveSession } from './lib/api';
-import { BrainCircuit, FolderOpen, KeyRound, PenTool, PanelRightClose, PanelLeftClose, Save } from 'lucide-react';
+import { BrainCircuit, FolderOpen, KeyRound, PenTool, PanelRightClose, PanelLeftClose, Save, Hammer } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Toaster, toast } from 'sonner';
 
@@ -256,15 +256,17 @@ export default function App() {
         />
 
         <header className={`h-[60px] border-b flex justify-between items-center px-6 backdrop-blur-[10px] shrink-0 z-20 transition-colors duration-500 ${
-          isM1nd 
-            ? 'bg-[rgba(20,12,28,0.85)] border-[#b026ff]/20' 
-            : 'bg-[rgba(16,18,24,0.8)] border-border-subtle'
+          isBuilder
+            ? 'bg-[rgba(8,16,12,0.9)] border-[#50fa7b]/20'
+            : isM1nd 
+              ? 'bg-[rgba(20,12,28,0.85)] border-[#b026ff]/20' 
+              : 'bg-[rgba(16,18,24,0.8)] border-border-subtle'
         }`}>
           <div className="flex items-center gap-6">
             <div className={`font-display font-bold text-[1.1rem] tracking-[3px] transition-colors duration-500 ${
-              isM1nd ? 'text-[#b026ff]' : 'text-accent'
+              isBuilder ? 'text-[#50fa7b]' : isM1nd ? 'text-[#b026ff]' : 'text-accent'
             }`}>
-              M1ND // SYSTEM
+              {isBuilder ? 'BU1LDER // LIVE' : 'M1ND // SYSTEM'}
             </div>
 
             <button
@@ -315,6 +317,15 @@ export default function App() {
                 <BrainCircuit size={14} />
                 M1ND
               </button>
+              <button
+                onClick={() => setAppMode('builder')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold tracking-wider transition-all duration-300 ${
+                  appMode === 'builder' ? 'bg-[#50fa7b]/20 text-[#50fa7b]' : 'text-text-dim hover:text-white'
+                }`}
+              >
+                <Hammer size={14} />
+                BU1LDER
+              </button>
             </div>
           </div>
 
@@ -335,7 +346,7 @@ export default function App() {
                       : 'SAVED'}
               </span>
             </button>
-            <span>SYNC: <span className={isM1nd ? 'text-[#b026ff]' : 'text-accent'}>{syncPct}%</span></span>
+            <span>SYNC: <span className={isBuilder ? 'text-[#50fa7b]' : isM1nd ? 'text-[#b026ff]' : 'text-accent'}>{syncPct}%</span></span>
             <span>NODES: <span className="text-text-main">{totalNodes}</span></span>
             <span>UPTIME: <LiveUptime /></span>
             <div className="text-[9px] px-2 py-0.5 rounded bg-[#222] text-white font-mono tracking-wider">v2.5.0</div>
