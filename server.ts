@@ -3,14 +3,11 @@ dotenv.config({ path: '.env' });
 dotenv.config({ path: '.env.local', override: true });
 import express from "express";
 import rateLimit from "express-rate-limit";
-import { readFile } from 'node:fs/promises';
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createProvider, getProviderNames, PROVIDER_FACTORIES, type AIProvider, type ChatMessage } from "./src/server/providers/index.js";
-import { validateAIResponse, SystemStateSchema, GraphDataSchema, AnalysisResultSchema } from "./src/server/validation.js";
-import { performWebResearch, buildResearchContext } from "./src/server/web-research.js";
-import { initM1ndBridge, getM1ndBridge, type M1ndBridge } from "./src/server/m1nd-bridge.js";
+import { createProvider } from "./src/server/providers/index.js";
+import { initM1ndBridge, getM1ndBridge } from "./src/server/m1nd-bridge.js";
 import {
   createSession,
   deleteSession,
@@ -28,74 +25,24 @@ import {
   runSessionAdvancedAction,
 } from "./src/server/session-analysis.js";
 import { importCodebaseToSession } from "./src/server/codebase-import.js";
+import {
+  analyzeArchitectureWorkflow,
+  applyProposalWorkflow,
+  generateGraphStructureWorkflow,
+  generateProposalWorkflow,
+  performDeepResearchWorkflow,
+} from "./src/server/ai-workflows.js";
 import { readEnvConfigState, writeEnvConfig } from "./src/server/env-config.js";
+import {
+  chatCompletionWithFallback,
+  collectProviderStates,
+  getActiveProvider,
+  getActiveProviderName,
+  setActiveProvider,
+} from "./src/server/provider-runtime.js";
 import { runOMXSimulation } from "./src/server/omx-runner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// ─── SSOT Provider Initialization ────────────────────────────────────
-// Provider is now mutable — can be switched at runtime via API
-let provider: AIProvider = createProvider();
-
-type CompletionConfigLike = {
-  model?: string;
-  jsonMode?: boolean;
-  maxTokens?: number;
-  temperature?: number;
-};
-
-type ProviderProbe = {
-  status: 'ready' | 'offline' | 'blocked' | 'missing_config';
-  error?: string;
-};
-
-function extractJSON(text: string): string {
-  // 1. Try the raw text as-is (works when json_object mode returns clean JSON)
-  const trimmed = text.trim();
-  try {
-    JSON.parse(trimmed);
-    return trimmed;
-  } catch {}
-
-  // 2. Strip markdown code fences if present (Claude often wraps JSON in ```json ... ```)
-  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (fenceMatch) {
-    const fenced = fenceMatch[1].trim();
-    try {
-      JSON.parse(fenced);
-      return fenced;
-    } catch {}
-  }
-  
-  // 3. Bracket-match: find the outermost { ... } using depth tracking
-  //    This avoids the old bug where indexOf/lastIndexOf matched braces inside string values
-  let depth = 0;
-  let start = -1;
-  let inString = false;
-  let escaped = false;
-  
-  for (let i = 0; i < trimmed.length; i++) {
-    const ch = trimmed[i];
-    
-    if (escaped) { escaped = false; continue; }
-    if (ch === '\\' && inString) { escaped = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    
-    if (ch === '{') {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (ch === '}') {
-      depth--;
-      if (depth === 0 && start !== -1) {
-        return trimmed.substring(start, i + 1);
-      }
-    }
-  }
-  
-  // 4. Fallback: return as-is and let the validator handle it
-  return trimmed;
-}
 
 function createEphemeralSession(input: {
   id?: string;
@@ -141,165 +88,6 @@ async function resolveSessionPayload(
 
   return loadSession(sessionId);
 }
-
-function collectFileUris(prompt: string): string[] {
-  const matches = prompt.match(/file:\/\/[^\s]+/g) || [];
-  return [...new Set(matches)];
-}
-
-async function hydratePromptWithFiles(prompt: string): Promise<string> {
-  const uris = collectFileUris(prompt);
-  if (uris.length === 0) return prompt;
-
-  const sections: string[] = [];
-  for (const uri of uris.slice(0, 6)) {
-    try {
-      const url = new URL(uri);
-      const filePath = decodeURIComponent(url.pathname);
-      const content = await readFile(filePath, 'utf8');
-      sections.push(
-        [
-          `## FILE CONTEXT`,
-          `Source: ${filePath}`,
-          content.slice(0, 24000),
-        ].join('\n'),
-      );
-    } catch (error: any) {
-      sections.push(
-        [
-          `## FILE CONTEXT`,
-          `Source: ${uri}`,
-          `ERROR: failed to read file (${error.message || 'unknown error'})`,
-        ].join('\n'),
-      );
-    }
-  }
-
-  return `${prompt}\n\n--- ATTACHED FILE CONTENT ---\n\n${sections.join('\n\n---\n\n')}`;
-}
-
-function fallbackProviderOrder(activeProviderName: string): string[] {
-  const ordered = [activeProviderName, 'bridge', 'openai', 'xai'];
-  return [...new Set(ordered.filter(Boolean))];
-}
-
-async function chatCompletionWithFallback(
-  messages: ChatMessage[],
-  config: CompletionConfigLike,
-  purpose: string,
-): Promise<{ content: string; providerName: string; providerLabel: string; fallbackUsed: boolean }> {
-  const attempted: string[] = [];
-
-  for (const providerName of fallbackProviderOrder(provider.name)) {
-    let candidate: AIProvider;
-    try {
-      candidate = providerName === provider.name ? provider : createProvider(providerName);
-    } catch (error: any) {
-      attempted.push(`${providerName}: unavailable (${error.message})`);
-      continue;
-    }
-
-    try {
-      const content = await candidate.chatCompletion(messages, config);
-      return {
-        content,
-        providerName: candidate.name,
-        providerLabel: candidate.label,
-        fallbackUsed: candidate.name !== provider.name,
-      };
-    } catch (error: any) {
-      attempted.push(`${candidate.name}: ${error.message || 'request failed'}`);
-      console.warn(`[SSOT] ${purpose} failed on ${candidate.name}: ${error.message}`);
-    }
-  }
-
-  throw new Error(`[AI] ${purpose} failed across providers — ${attempted.join(' | ')}`);
-}
-
-async function probeProviderHealth(providerName: string): Promise<ProviderProbe> {
-  const timeout = AbortSignal.timeout(4000);
-
-  try {
-    switch (providerName) {
-      case 'xai': {
-        if (!process.env.XAI_API_KEY) {
-          return { status: 'missing_config', error: '[xAI] XAI_API_KEY environment variable is required.' };
-        }
-        const res = await fetch('https://api.x.ai/v1/models', {
-          headers: { Authorization: `Bearer ${process.env.XAI_API_KEY}` },
-          signal: timeout,
-        });
-        if (res.ok) return { status: 'ready' };
-        const body = await res.text();
-        return {
-          status: res.status === 403 ? 'blocked' : 'offline',
-          error: `[xAI] ${res.status} ${body}`.slice(0, 300),
-        };
-      }
-      case 'openai': {
-        if (!process.env.OPENAI_API_KEY) {
-          return { status: 'missing_config', error: '[OpenAI] OPENAI_API_KEY environment variable is required.' };
-        }
-        const res = await fetch('https://api.openai.com/v1/models', {
-          headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-          signal: timeout,
-        });
-        if (res.ok) return { status: 'ready' };
-        const body = await res.text();
-        return {
-          status: res.status === 403 ? 'blocked' : 'offline',
-          error: `[OpenAI] ${res.status} ${body}`.slice(0, 300),
-        };
-      }
-      case 'bridge': {
-        const baseUrl = (process.env.THEBRIDGE_URL || 'http://127.0.0.1:7788/v1').replace(/\/v1$/, '');
-        const res = await fetch(`${baseUrl}/health`, { signal: timeout });
-        if (res.ok) return { status: 'ready' };
-        const body = await res.text();
-        return { status: 'offline', error: `[BRIDGE] ${res.status} ${body}`.slice(0, 300) };
-      }
-      default:
-        return { status: 'offline', error: 'Unknown provider.' };
-    }
-  } catch (error: any) {
-    return {
-      status: providerName === 'bridge' ? 'offline' : 'blocked',
-      error: `[${providerName}] ${error.message || 'Probe failed'}`,
-    };
-  }
-}
-
-async function collectProviderStates() {
-  const names = getProviderNames();
-  const providers = [];
-
-  for (const name of names) {
-    const probe = await probeProviderHealth(name);
-    try {
-      const p = PROVIDER_FACTORIES[name]();
-      providers.push({
-        name: p.name,
-        label: p.label,
-        defaultModel: p.defaultModel,
-        active: p.name === provider.name,
-        status: probe.status,
-        error: probe.error,
-      });
-    } catch (e: any) {
-      providers.push({
-        name,
-        label: name,
-        defaultModel: null,
-        active: false,
-        status: probe.status,
-        error: probe.error || e.message,
-      });
-    }
-  }
-
-  return providers;
-}
-
 // ─── Rate Limiting ───────────────────────────────────────────────────
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,      // 1 minute window
@@ -318,6 +106,7 @@ async function startServer() {
 
   // --- Health & Config API Routes ---
   app.get("/api/health", (req, res) => {
+    const provider = getActiveProvider();
     res.json({
       status: "ok",
       provider: provider.name,
@@ -513,12 +302,9 @@ async function startServer() {
 
     try {
       const targetFile = await writeEnvConfig(updates);
-      const desiredProvider = process.env.AI_PROVIDER || provider.name;
+      const desiredProvider = process.env.AI_PROVIDER || getActiveProviderName();
       try {
-        provider = createProvider(desiredProvider);
-        if (provider.warmModel) {
-          provider.warmModel().catch(() => {});
-        }
+        await setActiveProvider(desiredProvider);
       } catch (error) {
         console.warn(`[SSOT] Provider re-init after env save failed: ${(error as Error).message}`);
       }
@@ -539,7 +325,7 @@ async function startServer() {
   /** List all available providers and their metadata */
   app.get("/api/ai/providers", async (req, res) => {
     const providers = await collectProviderStates();
-    res.json({ providers, active: provider.name });
+    res.json({ providers, active: getActiveProviderName() });
   });
 
   /** List models for a specific provider (or active provider) */
@@ -547,8 +333,8 @@ async function startServer() {
     const targetProvider = req.query.provider as string | undefined;
     
     try {
-      let targetP = provider;
-      if (targetProvider && targetProvider !== provider.name) {
+      let targetP = getActiveProvider();
+      if (targetProvider && targetProvider !== targetP.name) {
         targetP = createProvider(targetProvider);
       }
       
@@ -565,7 +351,7 @@ async function startServer() {
   });
 
   /** Switch active provider at runtime */
-  app.post("/api/ai/switch-provider", (req, res) => {
+  app.post("/api/ai/switch-provider", async (req, res) => {
     const { provider: newProviderName } = req.body;
     
     if (!newProviderName || typeof newProviderName !== 'string') {
@@ -573,12 +359,7 @@ async function startServer() {
     }
     
     try {
-      provider = createProvider(newProviderName);
-      
-      // Background warmup — pre-fetch auth token + establish connection
-      if (provider.warmModel) {
-        provider.warmModel().catch(() => {});
-      }
+      const provider = await setActiveProvider(newProviderName);
       
       res.json({ 
         success: true, 
@@ -594,6 +375,7 @@ async function startServer() {
   // Pre-warm a specific model connection (called when user selects a model in UI)
   app.post("/api/ai/warmup", (req, res) => {
     const { model } = req.body;
+    const provider = getActiveProvider();
     if (provider.warmModel) {
       provider.warmModel(model).catch(() => {});
       res.json({ status: 'warming', model: model || provider.defaultModel });
@@ -612,56 +394,9 @@ async function startServer() {
       return res.status(400).json({ error: "Missing or invalid 'prompt' field." });
     }
 
-    const hydratedPrompt = await hydratePromptWithFiles(prompt);
-
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `You are an expert system architect and mind-map generator (m1nd).
-Your task is to break down a user's project request into a detailed DAG (Directed Acyclic Graph) structure AND generate project artifacts.
-If a current graph or manifesto is provided, modify or expand them based on the user's prompt.
-Return the result as a JSON object with 'manifesto', 'architecture', and 'graph' (containing 'nodes' and 'links').
-
-Artifacts:
-- manifesto: A high-level project manifesto, core objectives, and business rules (Markdown).
-- architecture: Technical architecture decisions, patterns, and stack rationale (Markdown).
-
-Nodes must have: 
-- id (string)
-- label (string)
-- description (string)
-- status (pending|in-progress|completed)
-- type (frontend|backend|database|external|security)
-- data_contract (string, optional: what inputs it receives and outputs it returns)
-- decision_rationale (string, optional: why this architectural choice was made)
-- acceptance_criteria (string array: 2-5 testable conditions that prove this module works correctly. Each criterion must be verifiable by an autonomous agent — e.g. "POST /auth/login returns 200 with JWT for valid credentials", "Database migration creates users table with email unique index")
-- error_handling (string array, optional: how this module should handle failures — e.g. "If payment gateway timeout > 30s, circuit-break and return 503")
-- priority (number: build order computed from dependencies — 1 = foundation with no deps, higher = depends on lower priorities. Foundation layers like databases should be priority 1, services that depend on them priority 2, UI layers that depend on services priority 3+)
-- group (number for clustering)
-
-Links must have: source (node id), target (node id), label (optional string describing the data flow).
-Ensure the graph has a clear hierarchy and Single Source of Truth (SSOT). Avoid circular dependencies.
-IMPORTANT: The graph must be buildable by an autonomous agent in priority order. Lower priority numbers are built first.
-
-CRITICAL: You must return ONLY valid JSON.`
-      },
-      {
-        role: 'user',
-        content: `User Prompt: ${hydratedPrompt}\n\nCurrent Manifesto: ${currentManifesto || 'None'}\nCurrent Graph: ${currentGraph ? JSON.stringify(currentGraph) : 'None'}`
-      }
-    ];
-
     try {
-      const result = await chatCompletionWithFallback(messages, { jsonMode: true, model }, 'generateGraphStructure');
-      const rawContent = result.content;
-      const validated = validateAIResponse(extractJSON(rawContent), SystemStateSchema, 'generateGraphStructure');
-      res.json({
-        ...validated,
-        meta: {
-          provider: result.providerName,
-          fallbackUsed: result.fallbackUsed,
-        },
-      });
+      const result = await generateGraphStructureWorkflow({ prompt, currentGraph, currentManifesto, model });
+      res.json(result);
     } catch (e: any) {
       console.error("[SSOT] Failed to generate graph structure:", e.message);
       res.status(500).json({ error: e.message || "Failed to generate graph structure" });
@@ -674,71 +409,9 @@ CRITICAL: You must return ONLY valid JSON.`
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: "Missing or invalid 'prompt' field." });
     }
-
-    const hydratedPrompt = await hydratePromptWithFiles(prompt);
-
-    // ─── Phase 0: Gather m1nd structural context (non-blocking) ───
-    const m1ndBridge = getM1ndBridge();
-    let structuralContext = '';
-    if (m1ndBridge.isConnected) {
-      try {
-        console.log(`[SSOT] 🧠 Gathering m1nd structural context for: "${prompt.substring(0, 60)}..."`);
-        const ctx = await m1ndBridge.gatherStructuralContext(prompt);
-        if (ctx) {
-          const parts: string[] = ['\n--- M1ND STRUCTURAL CONTEXT ---'];
-          if (ctx.activatedNodes.length > 0) {
-            parts.push(`Activated nodes (most relevant): ${JSON.stringify(ctx.activatedNodes.slice(0, 5).map((n: any) => n.label || n.id || n.external_id))}`);
-          }
-          if (ctx.blastRadius) {
-            parts.push(`Blast radius: ${JSON.stringify(ctx.blastRadius.blast_radius || ctx.blastRadius).substring(0, 300)}`);
-          }
-          if (ctx.coChangePredictions) {
-            parts.push(`Co-change predictions: ${JSON.stringify(ctx.coChangePredictions).substring(0, 300)}`);
-          }
-          if (ctx.riskScore) {
-            parts.push(`Risk assessment: ${JSON.stringify(ctx.riskScore).substring(0, 200)}`);
-          }
-          if (ctx.layerViolations.length > 0) {
-            parts.push(`⚠ Layer violations: ${JSON.stringify(ctx.layerViolations.slice(0, 3))}`);
-          }
-          parts.push('--- END STRUCTURAL CONTEXT ---');
-          structuralContext = parts.join('\n');
-          console.log(`[SSOT] 🧠 Structural context: ${structuralContext.length} chars`);
-        }
-      } catch (e: any) {
-        console.warn(`[SSOT] m1nd context gather failed (degrading gracefully): ${e.message}`);
-      }
-    }
-
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `You are the KREATOR, an advanced AI system architect with structural awareness.
-The user wants to modify the existing system architecture.
-Analyze their prompt against the current graph, manifesto, and any structural context provided by the m1nd graph engine.
-If structural context is available, use it to:
-- Reference specific affected modules and their blast radius
-- Warn about co-change dependencies that should be updated together
-- Flag layer violations or structural risks
-Respond with a concise, highly technical, cyberpunk-flavored confirmation of what exactly you are going to change.
-Keep it under 4 sentences. Be direct, authoritative, and analytical. Do not use markdown formatting, just plain text.`
-      },
-      {
-        role: 'user',
-        content: `Manifesto: ${manifesto}\nCurrent Graph Nodes: ${currentGraph?.nodes?.length || 0}\nUser Prompt: ${hydratedPrompt}${structuralContext}\n\nWhat is your modification plan?`
-      }
-    ];
-
     try {
-      const result = await chatCompletionWithFallback(messages, { model }, 'generateProposal');
-      res.json({
-        proposal: result.content || "Awaiting confirmation to modify system topology.",
-        m1nd: m1ndBridge.isConnected ? { structuralContextChars: structuralContext.length, grounded: structuralContext.length > 0 } : null,
-        meta: {
-          provider: result.providerName,
-          fallbackUsed: result.fallbackUsed,
-        },
-      });
+      const result = await generateProposalWorkflow({ prompt, currentGraph, manifesto, model });
+      res.json(result);
     } catch (e: any) {
       console.error("[SSOT] Failed to generate proposal:", e.message);
       res.status(500).json({ error: e.message || "Failed to generate proposal" });
@@ -751,32 +424,9 @@ Keep it under 4 sentences. Be direct, authoritative, and analytical. Do not use 
     if (!prompt || !proposal) {
       return res.status(400).json({ error: "Missing 'prompt' or 'proposal' field." });
     }
-
-    const hydratedPrompt = await hydratePromptWithFiles(prompt);
-
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `You are a master system architect.
-You are given the current system graph, a user prompt, and a proposal that was agreed upon.
-Your task is to output the NEW updated graph structure in JSON format.
-The output MUST be a valid JSON object with 'nodes' and 'links' arrays.
-Nodes must have: id, label, group, description, data_contract, status, type, acceptance_criteria (string array of 2-5 testable conditions), priority (number, build order), error_handling (string array, optional).
-Links must have: source, target, label.
-Preserve existing acceptance_criteria and priority values for unchanged nodes. Generate new ones for added/modified nodes.
-CRITICAL: Return ONLY valid JSON.`
-      },
-      {
-        role: 'user',
-        content: `Current Graph: ${JSON.stringify(currentGraph)}\n\nUser Prompt: ${hydratedPrompt}\n\nAgreed Proposal: ${proposal}\n\nGenerate the new graph JSON.`
-      }
-    ];
-
     try {
-      const result = await chatCompletionWithFallback(messages, { jsonMode: true, model }, 'applyProposal');
-      const rawContent = result.content;
-      const validated = validateAIResponse(extractJSON(rawContent), GraphDataSchema, 'applyProposal');
-      res.json(validated);
+      const result = await applyProposalWorkflow({ prompt, currentGraph, manifesto, proposal, model });
+      res.json(result);
     } catch (e: any) {
       console.error("[SSOT] Failed to apply proposal:", e.message);
       res.status(500).json({ error: e.message || "Failed to apply proposal" });
@@ -789,28 +439,9 @@ CRITICAL: Return ONLY valid JSON.`
     if (!graph || !graph.nodes) {
       return res.status(400).json({ error: "Missing or invalid 'graph' field." });
     }
-
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `You are the "Critic", a senior software architect auditor.
-Your job is to analyze the provided system graph and manifesto for flaws, security risks, missing components (like missing databases or auth), and circular dependencies.
-If the architecture is solid, set isGood to true and provide a brief positive critique.
-If it has flaws, set isGood to false, provide a harsh but constructive critique, and provide an 'optimizedGraph' with the necessary fixes (adding missing nodes, fixing links, updating data contracts).
-
-CRITICAL: You must return ONLY valid JSON.`
-      },
-      {
-        role: 'user',
-        content: `Manifesto: ${manifesto}\n\nCurrent Graph: ${JSON.stringify(graph)}\n\nAnalyze this architecture.`
-      }
-    ];
-
     try {
-      const result = await chatCompletionWithFallback(messages, { jsonMode: true, model }, 'analyzeArchitecture');
-      const rawContent = result.content;
-      const validated = validateAIResponse(extractJSON(rawContent), AnalysisResultSchema, 'analyzeArchitecture');
-      res.json(validated);
+      const result = await analyzeArchitectureWorkflow({ graph, manifesto, model });
+      res.json(result);
     } catch (e: any) {
       console.error("[SSOT] Failed to analyze architecture:", e.message);
       res.status(500).json({ error: e.message || "Failed to analyze architecture" });
@@ -1106,108 +737,9 @@ CRITICAL: You must return ONLY valid JSON.`
     if (!node || !node.label) {
       return res.status(400).json({ error: "Missing or invalid 'node' field." });
     }
-
-    const researchQuery = `${node.label}: ${node.description || ''} ${node.data_contract ? 'Data contract: ' + node.data_contract : ''} best practices, architecture patterns, implementation`;
-
     try {
-      // Phase 1: Parallel web research across 6 sources
-      console.log(`[SSOT] 🔬 Deep Research: "${node.label}" — querying 6 sources...`);
-      const webResearch = await performWebResearch(researchQuery, {
-        perplexityKey: process.env.PERPLEXITY_API_KEY,
-        serperKey: process.env.SERPER_API_KEY,
-        readTopUrls: 2,
-        includeScholar: true,
-      });
-
-      const researchContext = buildResearchContext(webResearch);
-      console.log(`[SSOT] 📚 Research context: ${researchContext.length} chars, ${webResearch.totalSourcesFound} sources`);
-
-      // Phase 1.5: Enrich with m1nd document bindings (non-blocking)
-      let structuralBindings = '';
-      const m1ndBridge = getM1ndBridge();
-      if (m1ndBridge.isConnected) {
-        try {
-          const [bindings, drift] = await Promise.allSettled([
-            m1ndBridge.documentBindings(undefined, node.label),
-            m1ndBridge.documentDrift(undefined, node.label),
-          ]);
-
-          const bindingData = bindings.status === 'fulfilled' ? bindings.value : null;
-          const driftData = drift.status === 'fulfilled' ? drift.value : null;
-
-          if (bindingData || driftData) {
-            const parts: string[] = ['\n# Structural Bindings (m1nd Graph Engine)'];
-            if (bindingData?.bindings?.length > 0) {
-              parts.push(`This concept is bound to ${bindingData.bindings.length} code locations:`);
-              for (const b of bindingData.bindings.slice(0, 5)) {
-                parts.push(`- ${b.source_path || b.file_path || b.node_id} (confidence: ${b.score || b.confidence || 'n/a'})`);
-              }
-            }
-            if (driftData?.findings?.length > 0) {
-              parts.push(`\n⚠ Document drift detected: ${driftData.findings.length} stale bindings`);
-              for (const f of driftData.findings.slice(0, 3)) {
-                parts.push(`- ${f.message || f.description || JSON.stringify(f)}`);
-              }
-            }
-            structuralBindings = parts.join('\n');
-            console.log(`[SSOT] 🧠 Structural bindings: ${structuralBindings.length} chars`);
-          }
-        } catch (e: any) {
-          console.warn(`[SSOT] m1nd bindings failed (degrading): ${e.message}`);
-        }
-      }
-
-      // Phase 2: Send enriched context to the active LLM for synthesis
-      const messages: ChatMessage[] = [
-        {
-          role: 'system',
-          content: `You are an advanced AI research assistant for the 'm1nd' architectural system.
-You will receive REAL web research data (papers, articles, source excerpts) gathered from Perplexity, Google Scholar, Semantic Scholar, CrossRef, and live web pages.
-You may also receive STRUCTURAL BINDINGS from the m1nd graph engine showing where this concept is implemented in the codebase.
-
-Your task is to synthesize this research into a comprehensive report covering:
-1. **Current State of the Art** — what the latest research and industry practices say.
-2. **Academic Foundations** — relevant papers and their key findings.
-3. **Open Source Landscape** — promising repositories, frameworks, and tools.
-4. **Structural Grounding** — if m1nd bindings are available, show how this concept maps to the actual codebase.
-5. **Implementation Recommendations** — concrete, actionable suggestions.
-6. **Risk Analysis** — potential pitfalls and how to mitigate them.
-7. **5-Year Forecast** — where this technology is heading.
-
-CITATION RULES:
-- Reference specific papers by title and year when available.
-- Include URLs for web sources.
-- Distinguish between established consensus and emerging ideas.
-
-Format your response in clean Markdown with clear sections.`
-        },
-        {
-          role: 'user',
-          content: `Project Context: ${projectContext}\n\nModule to Research:\nName: ${node.label}\nDescription: ${node.description}\nData Contract: ${node.data_contract || 'None'}\n\n---\n\n# Real-Time Research Data\n\n${researchContext}${structuralBindings}\n\n---\n\nPlease synthesize the above research data into a comprehensive deep research report for this module.`
-        }
-      ];
-
-      const result = await chatCompletionWithFallback(messages, { model }, 'performDeepResearch');
-
-      res.json({
-        research: result.content || 'Research failed.',
-        meta: {
-          sourcesFound: webResearch.totalSourcesFound,
-          searchTimeMs: webResearch.searchTimeMs,
-          sourcesBreakdown: {
-            perplexity: webResearch.perplexityAnswer ? 1 : 0,
-            webArticles: webResearch.sources.filter(s => s.source === 'serper').length,
-            scholarPapers: webResearch.sources.filter(s => s.source === 'scholar').length,
-            semanticScholar: webResearch.sources.filter(s => s.source === 'semantic_scholar').length,
-            crossref: webResearch.sources.filter(s => s.source === 'crossref').length,
-            githubDonors: webResearch.githubDonors.length,
-          },
-          enrichedPages: webResearch.enrichedContent.length,
-          m1nd: m1ndBridge.isConnected ? { structuralBindingsChars: structuralBindings.length, grounded: structuralBindings.length > 0 } : null,
-          provider: result.providerName,
-          fallbackUsed: result.fallbackUsed,
-        },
-      });
+      const result = await performDeepResearchWorkflow({ node, projectContext, model });
+      res.json(result);
     } catch (e: any) {
       console.error("[SSOT] Failed to perform deep research:", e.message);
       res.status(500).json({ error: e.message || "Failed to perform deep research" });
@@ -1251,6 +783,7 @@ Format your response in clean Markdown with clear sections.`
     console.log(`${BORDER}│${R} ${ACCENT}◉${R} ${B}${TITLE}M1ND${R} ${D}${VALUE}//${R} ${B}${TITLE}RETROBUILDER${R} ${D}${VALUE}· cognition layer online${R}        ${BORDER}│${R}`);
     console.log(`${BORDER}├──────────────────────────────────────────────────────────────┤${R}`);
     console.log(`${BORDER}│${R} ${LABEL}◈ Server${R}     ${VALUE}http://localhost:${PORT}${R}${' '.repeat(Math.max(0, 31 - String(PORT).length))}${BORDER}│${R}`);
+    const provider = getActiveProvider();
     console.log(`${BORDER}│${R} ${LABEL}◆ Provider${R}   ${VALUE}${pad(provider.label, 42)}${R}${BORDER}│${R}`);
     console.log(`${BORDER}│${R} ${LABEL}⬢ Model${R}      ${VALUE}${pad(provider.defaultModel, 42)}${R}${BORDER}│${R}`);
     console.log(`${BORDER}│${R} ${LABEL}⟳ Rate${R}       ${WARN}${pad('20 req/min per IP', 42)}${R}${BORDER}│${R}`);

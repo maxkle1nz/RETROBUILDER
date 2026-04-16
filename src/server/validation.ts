@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import { enforceDAGInvariants, breakCycles } from './graph-integrity.js';
 
 const stringArrayish = z.union([z.array(z.string()), z.string()]).transform((value) => {
   if (Array.isArray(value)) return value.map((item) => item.trim()).filter(Boolean);
@@ -127,7 +128,6 @@ export const AnalysisResultSchema = z.object({
  * Leaves structural JSON whitespace intact.
  */
 function sanitizeJsonStrings(raw: string): string {
-  // Walk through the string, track whether we're inside a JSON string value
   let result = '';
   let inString = false;
   let escaped = false;
@@ -153,12 +153,10 @@ function sanitizeJsonStrings(raw: string): string {
       continue;
     }
     
-    // Only sanitize control chars when inside a string value
     if (inString) {
       if (ch === '\n') { result += '\\n'; continue; }
       if (ch === '\r') { result += '\\r'; continue; }
       if (ch === '\t') { result += '\\t'; continue; }
-      // Strip other rare control chars inside strings
       if (ch.charCodeAt(0) < 0x20 && ch !== '\n' && ch !== '\r' && ch !== '\t') {
         continue;
       }
@@ -181,15 +179,12 @@ export function validateAIResponse<T>(
   try {
     let parsed: any;
     
-    // 1. Direct parse (works when JSON is well-formed)
     try {
       parsed = JSON.parse(rawJson);
     } catch {
-      // 2. Smart sanitize: escape only newlines inside string values
       try {
         parsed = JSON.parse(sanitizeJsonStrings(rawJson));
       } catch {
-        // 3. Last resort: extract JSON object boundaries and retry
         const start = rawJson.indexOf('{');
         const end = rawJson.lastIndexOf('}');
         if (start !== -1 && end > start) {
@@ -209,4 +204,68 @@ export function validateAIResponse<T>(
     }
     throw new Error(`[Validation] ${endpoint}: Failed to parse AI response as JSON`);
   }
+}
+
+// ─── Graph Integrity Enforcement ─────────────────────────────────────
+
+/**
+ * Validate a graph's structural integrity after Zod schema validation.
+ * Enforces DAG invariants: no cycles, no dangling links, priority consistency.
+ * 
+ * - Cycles → blocking error (rejects the graph) or auto-repair with allowCycleBreaking
+ * - Dangling links → auto-repaired (stripped)
+ * - Self-loops → auto-repaired (stripped)
+ * - Priority inversions → warning (logged)
+ * - Orphan nodes → warning (logged)
+ * 
+ * @returns The repaired graph (or original if no repair needed)
+ * @throws Error if unrecoverable structural violations are found (cycles)
+ */
+export function validateGraphIntegrity(
+  graph: { nodes: any[]; links: any[] },
+  endpoint: string,
+  options: { allowCycleBreaking?: boolean } = {},
+): { nodes: any[]; links: any[] } {
+  const report = enforceDAGInvariants(graph.nodes, graph.links, { autoRepair: true });
+
+  // Log warnings (non-blocking)
+  for (const w of report.warnings) {
+    console.warn(`[Integrity] ${endpoint}: ⚠ ${w.code} — ${w.message}`);
+  }
+
+  // Handle cycles
+  if (report.stats.cycleCount > 0) {
+    if (options.allowCycleBreaking) {
+      console.warn(`[Integrity] ${endpoint}: 🔄 Attempting to break ${report.stats.cycleCount} cycle(s)...`);
+      const repaired = breakCycles(graph.nodes, report.repaired?.links ?? graph.links);
+      console.warn(`[Integrity] ${endpoint}: ✂ Removed ${repaired.removed.length} edge(s) to break cycles: ${repaired.removed.map((r) => `${r.source}→${r.target}`).join(', ')}`);
+
+      // Re-validate after repair
+      const recheck = enforceDAGInvariants(graph.nodes, repaired.links, { autoRepair: true });
+      if (recheck.stats.cycleCount > 0) {
+        const cycleErrors = recheck.errors.filter((e) => e.code === 'CYCLE_DETECTED');
+        throw new Error(
+          `[Integrity] ${endpoint}: FATAL — Could not break all cycles. Remaining: ${cycleErrors.map((e) => e.message).join('; ')}`,
+        );
+      }
+
+      return { nodes: graph.nodes, links: repaired.links };
+    }
+
+    // Strict mode: reject outright
+    const cycleErrors = report.errors.filter((e) => e.code === 'CYCLE_DETECTED');
+    throw new Error(
+      `[Integrity] ${endpoint}: Graph contains circular dependencies — ${cycleErrors.map((e) => e.message).join('; ')}`,
+    );
+  }
+
+  // Log success
+  const { stats } = report;
+  console.log(
+    `[Integrity] ${endpoint}: ✓ DAG valid — ${stats.nodeCount} nodes, ${stats.linkCount} links, ${stats.connectedComponents} component(s)` +
+      (stats.danglingLinkCount > 0 ? ` (${stats.danglingLinkCount} dangling links repaired)` : '') +
+      (stats.orphanCount > 0 ? ` (${stats.orphanCount} orphan warnings)` : ''),
+  );
+
+  return report.repaired ?? graph;
 }
