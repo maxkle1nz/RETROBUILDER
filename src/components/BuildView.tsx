@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ReactFlow, Background, BackgroundVariant, MiniMap, useNodesState, useEdgesState } from '@xyflow/react';
+import { ReactFlow, Background, BackgroundVariant, MiniMap } from '@xyflow/react';
 import { useGraphStore } from '../store/useGraphStore';
 import { useBuildStore } from '../store/useBuildStore';
 import { useOMXStream } from '../hooks/useOMXStream';
@@ -13,17 +13,22 @@ const nodeTypes = { cyber: CyberNodeBuild };
 
 export default function BuildView() {
   const { graphData, activeSessionId, setAppMode } = useGraphStore();
-  const { isBuilding, buildProgress, completedNodes, totalNodes, nodeStates } = useBuildStore();
+  const isBuilding = useBuildStore((s) => s.isBuilding);
+  const buildProgress = useBuildStore((s) => s.buildProgress);
+  const completedNodes = useBuildStore((s) => s.completedNodes);
+  const totalNodes = useBuildStore((s) => s.totalNodes);
+  const nodeStates = useBuildStore((s) => s.nodeStates);
 
-  // Start SSE stream as soon as BuildView mounts
-  useOMXStream(activeSessionId, true);
+  // Only start SSE stream when a build is actually in progress
+  useOMXStream(activeSessionId, isBuilding);
 
-  // Convert graph data → XYFlow format (same layout as GraphView)
-  const rfNodes = useMemo(
+  // Convert graph data → XYFlow format
+  // Nodes are computed from graphData; CyberNodeBuild reads its own state from useBuildStore
+  const nodes = useMemo(
     () =>
       graphData.nodes.map((n, i) => ({
         id: n.id,
-        type: 'cyber',
+        type: 'cyber' as const,
         position: (n as any).position ?? { x: (i % 4) * 220 + 60, y: Math.floor(i / 4) * 160 + 60 },
         data: { label: n.label, type: n.type, status: n.status, description: n.description },
         draggable: false,
@@ -32,7 +37,8 @@ export default function BuildView() {
     [graphData.nodes],
   );
 
-  const rfEdges = useMemo(
+  // Edges re-compute on every nodeStates change so they illuminate in real-time
+  const edges = useMemo(
     () =>
       graphData.links.map((l) => {
         const sourceState = nodeStates[l.source];
@@ -52,9 +58,6 @@ export default function BuildView() {
       }),
     [graphData.links, nodeStates],
   );
-
-  const [nodes] = useNodesState(rfNodes);
-  const [edges] = useEdgesState(rfEdges);
 
   const exitBuild = () => {
     setAppMode('architect');
