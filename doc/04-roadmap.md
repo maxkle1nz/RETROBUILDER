@@ -76,7 +76,21 @@ Progress at v0.4.0: **~75% of original roadmap complete**. All 5 foundational ob
 
 ---
 
-## 6. Beyond Original Roadmap (Delivered)
+## 6. Critical Backlog & Fixes (Post QA)
+**Objective:** Address operational limitations discovered during full-pipeline autonomous tests.
+
+| Sub-item | Severity | Status | Notes |
+|---|---|---|---|
+| Server-Side Cycle Detection | P1 | ❌ Pending | `applyProposal` must throw if it detects cyclic dependencies |
+| OMX Bootstrapping (Phase 0) | P1 | ❌ Pending | OMX planner assumes implicit package.json/docker/setup environments. Must instruct initial command scaffolds. |
+| Batch Research Queue | P2 | ❌ Pending | Deep Research takes too long node-by-node (rate limiting) |
+| Donor Logic Checking | P2 | ❌ Pending | Validating incompatible cross-stack logic |
+
+**Remaining work:** Cycle detection in generation; OMX missing context bootstrapping; Batch endpoint creation.
+
+---
+
+## 7. Beyond Original Roadmap (Delivered)
 
 Features shipped that exceeded the original scope:
 

@@ -80,3 +80,11 @@ As of v0.4.0 (2026-04-16), the following features and components are implemented
 | Validation | Zod 4 |
 | Graph Engine | m1nd MCP (stdio child process) |
 | Research | Perplexity, Serper, Semantic Scholar, CrossRef, GitHub, Jina |
+
+## 7. QA & Audit Status (v0.4.0)
+As of the latest release, the system has undergone a full Autonomous E2E Validation and an explicit `m1nd.audit(profile: production)`:
+- **Graph Integrity:** Connectivity (B), Duplication (A), Staleness (A).
+- **Core Stability:** The JSON extraction engine handles unstructured LLM reasoning blocks flawlessly via a depth-tracking parser.
+- **Identified Autonomous Limitations (Pending):**
+  - **OMX Scaffolding:** `plan.md` outputs lack "Phase 0" environment boots (e.g. `npm init`, `package.json`).
+  - **Cycle Handling:** The DAG can be hallucinated by the LLM into cyclic dependencies, requiring server-side guardrails.
