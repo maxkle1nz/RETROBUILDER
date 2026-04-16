@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
-import { generateGraphStructure, generateProposal, applyProposal } from '../lib/api';
+import { activateSessionDraft, generateGraphStructure, generateProposal, applyProposal } from '../lib/api';
 import { m1nd } from '../lib/m1nd';
 import { Send, Loader2, Terminal, Check, X, BrainCircuit, Download, Upload, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,7 +14,26 @@ interface ChatMessage {
 }
 
 export default function ChatFooter() {
-  const { graphData, setGraphData, setManifesto, setArchitecture, manifesto, isGenerating, setIsGenerating, projectContext, setProjectContext, pendingProposal, setPendingProposal, appMode } = useGraphStore();
+  const {
+    activeSessionId,
+    activeSessionName,
+    activeSessionSource,
+    graphData,
+    setGraphData,
+    setManifesto,
+    setArchitecture,
+    manifesto,
+    architecture,
+    isGenerating,
+    setIsGenerating,
+    projectContext,
+    setProjectContext,
+    pendingProposal,
+    setPendingProposal,
+    appMode,
+    importMeta,
+    openSessionLauncher,
+  } = useGraphStore();
   const [prompt, setPrompt] = useState('');
   const [m1ndOnline, setM1ndOnline] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -48,6 +67,11 @@ export default function ChatFooter() {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
+    if (!activeSessionId) {
+      openSessionLauncher();
+      toast.info('Create or load a session first');
+      return;
+    }
     const currentPrompt = prompt;
     setPrompt('');
     addMessage('user', currentPrompt);
@@ -57,7 +81,15 @@ export default function ChatFooter() {
     if (isM1ndMode) {
       setIsGenerating(true);
       try {
-        const result = await m1nd.activate(currentPrompt);
+        const result = await activateSessionDraft(activeSessionId, currentPrompt, {
+          name: activeSessionName,
+          source: activeSessionSource,
+          graph: graphData,
+          manifesto,
+          architecture,
+          projectContext,
+          importMeta,
+        });
         if (result?.error) {
           addMessage('system', `m1nd: ${result.error}`);
           toast.warning('m1nd offline — structural queries unavailable');

@@ -11,9 +11,10 @@ import ChatFooter from './components/ChatFooter';
 import ProposalModal from './components/ProposalModal';
 import RightPanel from './components/RightPanel';
 import ErrorBoundary from './components/ErrorBoundary';
+import SessionLauncher from './components/SessionLauncher';
 import { useGraphStore } from './store/useGraphStore';
-import { registerModelGetter } from './lib/api';
-import { BrainCircuit, PenTool, PanelRightClose, PanelLeftClose } from 'lucide-react';
+import { listSessions, loadSession, registerModelGetter, saveSession } from './lib/api';
+import { BrainCircuit, FolderOpen, PenTool, PanelRightClose, PanelLeftClose, Save } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Toaster, toast } from 'sonner';
 
@@ -31,7 +32,24 @@ function LiveUptime() {
 }
 
 export default function App() {
-  const { appMode, setAppMode, isRightPanelOpen, graphData } = useGraphStore();
+  const {
+    appMode,
+    setAppMode,
+    isRightPanelOpen,
+    graphData,
+    activeSessionId,
+    activeSessionName,
+    activeSessionSource,
+    sessionSaveState,
+    manifesto,
+    architecture,
+    projectContext,
+    setAvailableSessions,
+    hydrateSession,
+    openSessionLauncher,
+    closeSessionLauncher,
+    setSessionSaveState,
+  } = useGraphStore();
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
@@ -43,6 +61,105 @@ export default function App() {
   useEffect(() => {
     registerModelGetter(() => useGraphStore.getState().activeModel);
   }, []);
+
+  const persistActiveSession = useCallback(async () => {
+    if (!activeSessionId) return;
+
+    await saveSession(activeSessionId, {
+      name: useGraphStore.getState().activeSessionName || 'Untitled Blueprint',
+      manifesto,
+      architecture,
+      graph: graphData,
+      projectContext,
+      importMeta: useGraphStore.getState().importMeta || undefined,
+    });
+  }, [activeSessionId, manifesto, architecture, graphData, projectContext]);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const sessions = await listSessions();
+      setAvailableSessions(sessions);
+      return sessions;
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to refresh sessions');
+      return [];
+    }
+  }, [setAvailableSessions]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrapSessions() {
+      const sessions = await refreshSessions();
+      const remembered = useGraphStore.getState().activeSessionId;
+      if (!remembered) return;
+
+      try {
+        const session = await loadSession(remembered);
+        if (!cancelled) {
+          hydrateSession(session);
+          closeSessionLauncher();
+        }
+      } catch {
+        if (!cancelled) {
+          openSessionLauncher();
+        }
+      }
+    }
+
+    bootstrapSessions();
+    return () => { cancelled = true; };
+  }, [refreshSessions, hydrateSession, closeSessionLauncher, openSessionLauncher]);
+
+  useEffect(() => {
+    if (!activeSessionId || sessionSaveState !== 'dirty') return;
+
+    const timer = window.setTimeout(async () => {
+      try {
+        setSessionSaveState('saving');
+        await persistActiveSession();
+        setSessionSaveState('saved');
+        await refreshSessions();
+      } catch (error) {
+        console.error(error);
+        setSessionSaveState('error');
+      }
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    activeSessionId,
+    sessionSaveState,
+    manifesto,
+    architecture,
+    graphData,
+    projectContext,
+    setSessionSaveState,
+    refreshSessions,
+    persistActiveSession,
+  ]);
+
+  useEffect(() => {
+    if (appMode === 'm1nd') {
+      useGraphStore.getState().openRightPanel();
+    }
+  }, [appMode]);
+
+  const handleManualSave = useCallback(async () => {
+    if (!activeSessionId) return;
+    try {
+      setSessionSaveState('saving');
+      await persistActiveSession();
+      setSessionSaveState('saved');
+      await refreshSessions();
+      toast.success('Session saved');
+    } catch (error) {
+      console.error(error);
+      setSessionSaveState('error');
+      toast.error('Failed to save session');
+    }
+  }, [activeSessionId, refreshSessions, setSessionSaveState, persistActiveSession]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -74,10 +191,15 @@ export default function App() {
         e.preventDefault();
         setAppMode('m1nd');
       }
+      // ⌘+S — save active session
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleManualSave();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [setAppMode]);
+  }, [setAppMode, handleManualSave]);
 
   const isM1nd = appMode === 'm1nd';
 
@@ -112,6 +234,24 @@ export default function App() {
             }`}>
               M1ND // SYSTEM
             </div>
+
+            <button
+              onClick={() => openSessionLauncher()}
+              className="flex items-center gap-2 px-3 py-1.5 rounded border border-border-subtle bg-black/40 text-text-dim hover:text-white hover:border-accent transition-colors"
+            >
+              <FolderOpen size={14} />
+              <div className="text-left">
+                <div className="text-[9px] uppercase tracking-[0.25em]">Session</div>
+                <div className="text-[11px] font-mono max-w-[220px] truncate">
+                  {activeSessionName || 'Choose a session'}
+                </div>
+              </div>
+              {activeSessionSource === 'imported_codebase' && (
+                <span className="text-[8px] uppercase tracking-widest px-2 py-0.5 rounded bg-[#50fa7b]/10 text-[#50fa7b]">
+                  Imported
+                </span>
+              )}
+            </button>
             
             <div className="flex bg-black/50 rounded-md border border-border-subtle p-1">
               <button
@@ -136,6 +276,22 @@ export default function App() {
           </div>
 
           <div className="flex gap-5 text-[11px] text-text-dim items-center font-mono">
+            <button
+              onClick={handleManualSave}
+              disabled={!activeSessionId || sessionSaveState === 'saving'}
+              className="flex items-center gap-2 px-3 py-1.5 rounded border border-border-subtle bg-black/40 hover:border-accent hover:text-white transition-colors disabled:opacity-50"
+            >
+              <Save size={12} />
+              <span>
+                {sessionSaveState === 'saving'
+                  ? 'SAVING'
+                  : sessionSaveState === 'dirty'
+                    ? 'UNSAVED'
+                    : sessionSaveState === 'error'
+                      ? 'ERROR'
+                      : 'SAVED'}
+              </span>
+            </button>
             <span>SYNC: <span className={isM1nd ? 'text-[#b026ff]' : 'text-accent'}>{syncPct}%</span></span>
             <span>NODES: <span className="text-text-main">{totalNodes}</span></span>
             <span>UPTIME: <LiveUptime /></span>
@@ -210,6 +366,7 @@ export default function App() {
         
         <ChatFooter />
         <ProposalModal />
+        <SessionLauncher />
       </div>
     </ErrorBoundary>
   );

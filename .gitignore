@@ -10,3 +10,13 @@ coverage/
 .env.local
 daemon_state.json
 ingest_roots.json
+.omx/
+.retrobuilder/
+auto_ingest_state.json
+boot_memory_state.json
+daemon_alerts.json
+document_cache_index.json
+graph_snapshot.json
+plasticity_state.json
+tremor_state.json
+trust_state.json

@@ -1,11 +1,29 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { GraphData, NodeData, LinkData, ProviderInfo, ModelInfo } from '../lib/api';
+import {
+  GraphData,
+  NodeData,
+  LinkData,
+  ProviderInfo,
+  ModelInfo,
+  SessionSummary,
+  SessionSource,
+  CodebaseImportMeta,
+  SessionDocument,
+} from '../lib/api';
 
 export type AppMode = 'architect' | 'm1nd';
+export type SessionSaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 interface GraphState {
+  activeSessionId: string | null;
+  activeSessionName: string | null;
+  activeSessionSource: SessionSource | null;
+  importMeta: CodebaseImportMeta | null;
+  availableSessions: SessionSummary[];
+  showSessionLauncher: boolean;
+  sessionSaveState: SessionSaveState;
   graphData: GraphData;
   manifesto: string;
   architecture: string;
@@ -48,12 +66,26 @@ interface GraphState {
   setActiveModel: (model: string | null) => void;
   setAvailableProviders: (providers: ProviderInfo[]) => void;
   setAvailableModels: (models: ModelInfo[]) => void;
+  setAvailableSessions: (sessions: SessionSummary[]) => void;
+  setSessionSaveState: (state: SessionSaveState) => void;
+  setSessionName: (name: string) => void;
+  openSessionLauncher: () => void;
+  closeSessionLauncher: () => void;
+  hydrateSession: (session: SessionDocument) => void;
+  clearSession: () => void;
 }
 
 export const useGraphStore = create<GraphState>()(
   persist(
     temporal(
       (set) => ({
+        activeSessionId: null,
+        activeSessionName: null,
+        activeSessionSource: null,
+        importMeta: null,
+        availableSessions: [],
+        showSessionLauncher: true,
+        sessionSaveState: 'idle',
         graphData: { nodes: [], links: [] },
         manifesto: '',
         architecture: '',
@@ -69,12 +101,24 @@ export const useGraphStore = create<GraphState>()(
         activeModel: null,
         availableProviders: [],
         availableModels: [],
-        setGraphData: (data) => set({ graphData: data }),
-        setManifesto: (manifesto) => set({ manifesto }),
-        setArchitecture: (architecture) => set({ architecture }),
+        setGraphData: (data) => set((state) => ({
+          graphData: data,
+          sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
+        })),
+        setManifesto: (manifesto) => set((state) => ({
+          manifesto,
+          sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
+        })),
+        setArchitecture: (architecture) => set((state) => ({
+          architecture,
+          sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
+        })),
         setSelectedNode: (node) => set({ selectedNode: node }),
         setIsGenerating: (isGenerating) => set({ isGenerating }),
-        setProjectContext: (context) => set({ projectContext: context }),
+        setProjectContext: (context) => set((state) => ({
+          projectContext: context,
+          sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
+        })),
         setPendingProposal: (proposal) => set({ pendingProposal: proposal }),
         setAppMode: (mode) => set({ appMode: mode }),
         openRightPanel: () => set({ isRightPanelOpen: true }),
@@ -84,7 +128,8 @@ export const useGraphStore = create<GraphState>()(
             ...state.graphData,
             nodes: state.graphData.nodes.map((n) => n.id === id ? { ...n, ...updates } : n)
           },
-          selectedNode: state.selectedNode?.id === id ? { ...state.selectedNode, ...updates } : state.selectedNode
+          selectedNode: state.selectedNode?.id === id ? { ...state.selectedNode, ...updates } : state.selectedNode,
+          sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
         })),
         removeNode: (id) => set((state) => ({
           graphData: {
@@ -92,13 +137,15 @@ export const useGraphStore = create<GraphState>()(
             links: state.graphData.links.filter((l) => l.source !== id && l.target !== id)
           },
           selectedNode: state.selectedNode?.id === id ? null : state.selectedNode,
-          isRightPanelOpen: state.selectedNode?.id === id ? false : state.isRightPanelOpen
+          isRightPanelOpen: state.selectedNode?.id === id ? false : state.isRightPanelOpen,
+          sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
         })),
         removeLink: (source, target) => set((state) => ({
           graphData: {
             ...state.graphData,
             links: state.graphData.links.filter((l) => !(l.source === source && l.target === target))
-          }
+          },
+          sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
         })),
         addLink: (link) => set((state) => {
           const exists = state.graphData.links.some(l => l.source === link.source && l.target === link.target);
@@ -107,7 +154,8 @@ export const useGraphStore = create<GraphState>()(
             graphData: {
               ...state.graphData,
               links: [...state.graphData.links, link]
-            }
+            },
+            sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
           };
         }),
         setHighlightedNodes: (nodeIds, source) => set({ 
@@ -122,12 +170,53 @@ export const useGraphStore = create<GraphState>()(
         setActiveModel: (model) => set({ activeModel: model }),
         setAvailableProviders: (providers) => set({ availableProviders: providers }),
         setAvailableModels: (models) => set({ availableModels: models }),
+        setAvailableSessions: (sessions) => set({ availableSessions: sessions }),
+        setSessionSaveState: (sessionSaveState) => set({ sessionSaveState }),
+        setSessionName: (activeSessionName) => set((state) => ({
+          activeSessionName,
+          sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
+        })),
+        openSessionLauncher: () => set({ showSessionLauncher: true }),
+        closeSessionLauncher: () => set({ showSessionLauncher: false }),
+        hydrateSession: (session) => set({
+          activeSessionId: session.id,
+          activeSessionName: session.name,
+          activeSessionSource: session.source,
+          importMeta: session.importMeta || null,
+          graphData: session.graph,
+          manifesto: session.manifesto,
+          architecture: session.architecture,
+          projectContext: session.projectContext,
+          selectedNode: null,
+          pendingProposal: null,
+          highlightedNodes: new Set<string>(),
+          highlightSource: null,
+          showSessionLauncher: false,
+          sessionSaveState: 'saved',
+        }),
+        clearSession: () => set({
+          activeSessionId: null,
+          activeSessionName: null,
+          activeSessionSource: null,
+          importMeta: null,
+          graphData: { nodes: [], links: [] },
+          manifesto: '',
+          architecture: '',
+          projectContext: '',
+          selectedNode: null,
+          pendingProposal: null,
+          highlightedNodes: new Set<string>(),
+          highlightSource: null,
+          showSessionLauncher: true,
+          sessionSaveState: 'idle',
+        }),
       }),
       {
         partialize: (state) => ({
-          graphData: state.graphData,
-          manifesto: state.manifesto,
-          architecture: state.architecture
+          activeSessionId: state.activeSessionId,
+          activeSessionName: state.activeSessionName,
+          activeSessionSource: state.activeSessionSource,
+          importMeta: state.importMeta,
         })
       }
     ),
@@ -135,13 +224,11 @@ export const useGraphStore = create<GraphState>()(
       name: 'retrobuilder-state',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        graphData: state.graphData,
-        manifesto: state.manifesto,
-        architecture: state.architecture,
-        projectContext: state.projectContext,
         appMode: state.appMode,
         activeProvider: state.activeProvider,
         activeModel: state.activeModel,
+        activeSessionId: state.activeSessionId,
+        showSessionLauncher: state.showSessionLauncher,
       }),
     }
   )

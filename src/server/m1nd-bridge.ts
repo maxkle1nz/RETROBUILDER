@@ -65,6 +65,7 @@ export class M1ndBridge extends EventEmitter {
   private messageId = 1;
   private pending = new Map<number, PendingRequest>();
   private buffer = '';
+  private exclusiveChain = Promise.resolve();
   private connected = false;
   private reconnecting = false;
   private reconnectAttempts = 0;
@@ -173,27 +174,27 @@ export class M1ndBridge extends EventEmitter {
 
   /** Spreading activation query across the connectome */
   async activate(query: string, topK: number = 20): Promise<any> {
-    return this.callTool('m1nd_activate', { agent_id: this.agentId, query, top_k: topK });
+    return this.callTool('activate', { agent_id: this.agentId, query, top_k: topK });
   }
 
   /** Impact radius / blast analysis for a node */
   async impact(nodeId: string, direction: 'forward' | 'reverse' | 'both' = 'forward'): Promise<any> {
-    return this.callTool('m1nd_impact', { agent_id: this.agentId, node_id: nodeId, direction });
+    return this.callTool('impact', { agent_id: this.agentId, node_id: nodeId, direction });
   }
 
   /** Co-change prediction for a modified node */
   async predict(changedNode: string, topK: number = 10): Promise<any> {
-    return this.callTool('m1nd_predict', { agent_id: this.agentId, changed_node: changedNode, top_k: topK });
+    return this.callTool('predict', { agent_id: this.agentId, changed_node: changedNode, top_k: topK });
   }
 
   /** Task-based warmup and priming */
   async warmup(taskDescription: string): Promise<any> {
-    return this.callTool('m1nd_warmup', { agent_id: this.agentId, task_description: taskDescription });
+    return this.callTool('warmup', { agent_id: this.agentId, task_description: taskDescription });
   }
 
   /** Server health and statistics */
   async health(): Promise<M1ndHealthStatus | null> {
-    const result = await this.callTool('m1nd_health', { agent_id: this.agentId });
+    const result = await this.callTool('health', { agent_id: this.agentId });
     if (!result) return null;
     return {
       connected: true,
@@ -206,95 +207,95 @@ export class M1ndBridge extends EventEmitter {
 
   /** Ingest or re-ingest a codebase */
   async ingest(codePath: string, adapter: string = 'code', mode: string = 'replace'): Promise<any> {
-    return this.callTool('m1nd_ingest', { agent_id: this.agentId, path: codePath, adapter, mode });
+    return this.callTool('ingest', { agent_id: this.agentId, path: codePath, adapter, mode });
   }
 
   /** Weight and structural drift analysis */
   async drift(): Promise<any> {
-    return this.callTool('m1nd_drift', { agent_id: this.agentId });
+    return this.callTool('drift', { agent_id: this.agentId });
   }
 
   // ─── Superpowers ─────────────────────────────────────────────────
 
   /** Test a structural claim about the codebase */
   async hypothesize(claim: string): Promise<any> {
-    return this.callTool('m1nd_hypothesize', { agent_id: this.agentId, claim });
+    return this.callTool('hypothesize', { agent_id: this.agentId, claim });
   }
 
   /** Validate a modification plan against the code graph */
   async validatePlan(actions: Array<{ action_type: string; file_path: string; description?: string }>): Promise<any> {
-    return this.callTool('m1nd_validate_plan', { agent_id: this.agentId, actions });
+    return this.callTool('validate_plan', { agent_id: this.agentId, actions });
   }
 
   /** Detect structural holes and missing connections */
   async missing(query: string): Promise<any> {
-    return this.callTool('m1nd_missing', { agent_id: this.agentId, query });
+    return this.callTool('missing', { agent_id: this.agentId, query });
   }
 
   /** Map runtime errors to structural root causes */
   async trace(errorText: string): Promise<any> {
-    return this.callTool('m1nd_trace', { agent_id: this.agentId, error_text: errorText });
+    return this.callTool('trace', { agent_id: this.agentId, error_text: errorText });
   }
 
   // ─── Search & Efficiency ─────────────────────────────────────────
 
   /** Unified code search */
   async search(query: string, mode: 'literal' | 'regex' | 'semantic' = 'semantic', topK: number = 20): Promise<any> {
-    return this.callTool('m1nd_search', { agent_id: this.agentId, query, mode, top_k: topK });
+    return this.callTool('search', { agent_id: this.agentId, query, mode, top_k: topK });
   }
 
   /** Intent-aware semantic code search */
   async seek(query: string, topK: number = 20): Promise<any> {
-    return this.callTool('m1nd_seek', { agent_id: this.agentId, query, top_k: topK });
+    return this.callTool('seek', { agent_id: this.agentId, query, top_k: topK });
   }
 
   /** Generate visual graph diagram */
   async diagram(center?: string, depth: number = 2, format: string = 'mermaid'): Promise<any> {
-    return this.callTool('m1nd_diagram', { agent_id: this.agentId, center, depth, format });
+    return this.callTool('diagram', { agent_id: this.agentId, center, depth, format });
   }
 
   /** Panoramic graph health overview */
   async panoramic(topN: number = 30): Promise<any> {
-    return this.callTool('m1nd_panoramic', { agent_id: this.agentId, top_n: topN });
+    return this.callTool('panoramic', { agent_id: this.agentId, top_n: topN });
   }
 
   /** Structural codebase metrics */
   async metrics(scope?: string, topK: number = 30): Promise<any> {
-    return this.callTool('m1nd_metrics', { agent_id: this.agentId, scope, top_k: topK });
+    return this.callTool('metrics', { agent_id: this.agentId, scope, top_k: topK });
   }
 
   /** Auto-detect architectural layers */
   async layers(): Promise<any> {
-    return this.callTool('m1nd_layers', { agent_id: this.agentId });
+    return this.callTool('layers', { agent_id: this.agentId });
   }
 
   // ─── Surgical ────────────────────────────────────────────────────
 
   /** Full surgical context for a file + neighbourhood */
   async surgicalContext(filePath: string, symbol?: string): Promise<any> {
-    return this.callTool('m1nd_surgical_context_v2', { agent_id: this.agentId, file_path: filePath, symbol });
+    return this.callTool('surgical_context_v2', { agent_id: this.agentId, file_path: filePath, symbol });
   }
 
   /** Fast file reader with line numbers */
   async view(filePath: string, limit?: number): Promise<any> {
-    return this.callTool('m1nd_view', { agent_id: this.agentId, file_path: filePath, limit });
+    return this.callTool('view', { agent_id: this.agentId, file_path: filePath, limit });
   }
 
   // ─── Document Intelligence ───────────────────────────────────────
 
   /** Resolve a canonical document artifact */
   async documentResolve(docPath?: string, nodeId?: string): Promise<any> {
-    return this.callTool('m1nd_document_resolve', { agent_id: this.agentId, path: docPath, node_id: nodeId });
+    return this.callTool('document_resolve', { agent_id: this.agentId, path: docPath, node_id: nodeId });
   }
 
   /** Resolve document-to-code bindings */
   async documentBindings(docPath?: string, nodeId?: string, topK: number = 10): Promise<any> {
-    return this.callTool('m1nd_document_bindings', { agent_id: this.agentId, path: docPath, node_id: nodeId, top_k: topK });
+    return this.callTool('document_bindings', { agent_id: this.agentId, path: docPath, node_id: nodeId, top_k: topK });
   }
 
   /** Analyze stale/missing document-code bindings */
   async documentDrift(docPath?: string, nodeId?: string): Promise<any> {
-    return this.callTool('m1nd_document_drift', { agent_id: this.agentId, path: docPath, node_id: nodeId });
+    return this.callTool('document_drift', { agent_id: this.agentId, path: docPath, node_id: nodeId });
   }
 
   // ─── Composite: Structural Context for Kreator ───────────────────
@@ -356,6 +357,21 @@ export class M1ndBridge extends EventEmitter {
     } catch (err: any) {
       console.warn(`[m1nd-bridge] Structural context gather failed: ${err.message}`);
       return null;
+    }
+  }
+
+  async runExclusive<T>(work: () => Promise<T>): Promise<T> {
+    const previous = this.exclusiveChain;
+    let release: (() => void) | null = null;
+    this.exclusiveChain = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await previous;
+    try {
+      return await work();
+    } finally {
+      release?.();
     }
   }
 

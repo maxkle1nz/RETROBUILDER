@@ -10,6 +10,23 @@ import { createProvider, getProviderNames, PROVIDER_FACTORIES, type AIProvider, 
 import { validateAIResponse, SystemStateSchema, GraphDataSchema, AnalysisResultSchema } from "./src/server/validation.js";
 import { performWebResearch, buildResearchContext } from "./src/server/web-research.js";
 import { initM1ndBridge, getM1ndBridge, type M1ndBridge } from "./src/server/m1nd-bridge.js";
+import {
+  createSession,
+  deleteSession,
+  ensureSessionStorage,
+  listSessions,
+  loadSession,
+  saveSession,
+  type SessionDocument,
+} from "./src/server/session-store.js";
+import {
+  activateSessionQuery,
+  analyzeBlueprintGaps,
+  analyzeBlueprintImpact,
+  analyzeSessionReadiness,
+  runSessionAdvancedAction,
+} from "./src/server/session-analysis.js";
+import { importCodebaseToSession } from "./src/server/codebase-import.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,6 +82,51 @@ function extractJSON(text: string): string {
   return trimmed;
 }
 
+function createEphemeralSession(input: {
+  id?: string;
+  name?: string;
+  source?: SessionDocument['source'];
+  graph: { nodes: any[]; links: any[] };
+  manifesto?: string;
+  architecture?: string;
+  projectContext?: string;
+  importMeta?: SessionDocument['importMeta'];
+}): SessionDocument {
+  const now = new Date().toISOString();
+  return {
+    id: input.id || 'ephemeral-session',
+    name: input.name || 'Ephemeral Session',
+    source: input.source || 'manual',
+    createdAt: now,
+    updatedAt: now,
+    manifesto: input.manifesto || '',
+    architecture: input.architecture || '',
+    graph: input.graph || { nodes: [], links: [] },
+    projectContext: input.projectContext || '',
+    importMeta: input.importMeta,
+  };
+}
+
+async function resolveSessionPayload(
+  sessionId: string,
+  draft?: Partial<SessionDocument> & { graph?: { nodes: any[]; links: any[] } },
+): Promise<SessionDocument | null> {
+  if (draft) {
+    return createEphemeralSession({
+      id: sessionId,
+      name: draft.name || 'Draft Session',
+      source: draft.source || 'manual',
+      graph: draft.graph || { nodes: [], links: [] },
+      manifesto: draft.manifesto || '',
+      architecture: draft.architecture || '',
+      projectContext: draft.projectContext || '',
+      importMeta: draft.importMeta,
+    });
+  }
+
+  return loadSession(sessionId);
+}
+
 // ─── Rate Limiting ───────────────────────────────────────────────────
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,      // 1 minute window
@@ -75,6 +137,7 @@ const aiLimiter = rateLimit({
 });
 
 async function startServer() {
+  await ensureSessionStorage();
   const app = express();
   const PORT = 3000;
 
@@ -88,6 +151,132 @@ async function startServer() {
       label: provider.label,
       defaultModel: provider.defaultModel,
     });
+  });
+
+  // ─── Session API ────────────────────────────────────────────────────
+
+  app.get("/api/sessions", async (req, res) => {
+    const sessions = await listSessions();
+    res.json({ sessions });
+  });
+
+  app.post("/api/sessions", async (req, res) => {
+    const { name, source, manifesto, architecture, graph, projectContext, importMeta } = req.body;
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({ error: "Missing or invalid 'name' field." });
+    }
+
+    const session = await createSession({
+      name,
+      source: source || 'manual',
+      manifesto: manifesto || '',
+      architecture: architecture || '',
+      graph: graph || { nodes: [], links: [] },
+      projectContext: projectContext || '',
+      importMeta,
+    });
+
+    res.status(201).json(session);
+  });
+
+  app.post("/api/sessions/import/codebase", async (req, res) => {
+    const { path: codebasePath, model } = req.body;
+    if (!codebasePath || typeof codebasePath !== 'string') {
+      return res.status(400).json({ error: "Missing or invalid 'path' field." });
+    }
+
+    try {
+      const result = await importCodebaseToSession(codebasePath, provider, model);
+      res.status(201).json(result);
+    } catch (e: any) {
+      console.error("[sessions] Failed to import codebase:", e.message);
+      res.status(500).json({ error: e.message || "Failed to import codebase" });
+    }
+  });
+
+  app.get("/api/sessions/:id", async (req, res) => {
+    const session = await loadSession(req.params.id);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+    res.json(session);
+  });
+
+  app.put("/api/sessions/:id", async (req, res) => {
+    try {
+      const session = await saveSession(req.params.id, req.body || {});
+      res.json(session);
+    } catch (e: any) {
+      res.status(404).json({ error: e.message || "Session not found." });
+    }
+  });
+
+  app.delete("/api/sessions/:id", async (req, res) => {
+    await deleteSession(req.params.id);
+    res.status(204).end();
+  });
+
+  app.post("/api/sessions/:id/readiness", async (req, res) => {
+    const draft = req.body?.draft;
+    const session = await resolveSessionPayload(req.params.id, draft);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+    const report = await analyzeSessionReadiness(session);
+    res.json(report);
+  });
+
+  app.post("/api/sessions/:id/impact", async (req, res) => {
+    const draft = req.body?.draft;
+    const session = await resolveSessionPayload(req.params.id, draft);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+    if (!req.body?.nodeId) {
+      return res.status(400).json({ error: "Missing 'nodeId' field." });
+    }
+    try {
+      const report = await analyzeBlueprintImpact(session, req.body.nodeId);
+      res.json(report);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message || "Failed to analyze impact." });
+    }
+  });
+
+  app.post("/api/sessions/:id/gaps", async (req, res) => {
+    const draft = req.body?.draft;
+    const session = await resolveSessionPayload(req.params.id, draft);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+    const report = await analyzeBlueprintGaps(session);
+    res.json(report);
+  });
+
+  app.post("/api/sessions/:id/activate", async (req, res) => {
+    const { query, top_k, draft } = req.body;
+    if (!query) {
+      return res.status(400).json({ error: "Missing 'query' field." });
+    }
+    const session = await resolveSessionPayload(req.params.id, draft);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+    const result = await activateSessionQuery(session, query, top_k || 12);
+    res.json(result);
+  });
+
+  app.post("/api/sessions/:id/advanced", async (req, res) => {
+    const { action, nodeId, draft } = req.body;
+    if (!action) {
+      return res.status(400).json({ error: "Missing 'action' field." });
+    }
+    const session = await resolveSessionPayload(req.params.id, draft);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+    const result = await runSessionAdvancedAction(session, action, nodeId);
+    res.json(result);
   });
 
   // ─── Provider & Model Configuration ─────────────────────────────────
@@ -474,172 +663,188 @@ CRITICAL: You must return ONLY valid JSON.`
   // ─── OMX Export Endpoint ─────────────────────────────────────────────
 
   app.post("/api/export/omx", (req, res) => {
-    const { graph, manifesto, architecture } = req.body;
+    const { graph, manifesto, architecture, sessionId, draft } = req.body;
 
-    if (!graph || !graph.nodes) {
-      return res.status(400).json({ error: "Missing 'graph' field." });
-    }
-
-    try {
-      // Topological sort: compute priority from links if not already set
-      const nodes = [...graph.nodes];
-      const links = graph.links || [];
-
-      // Build adjacency: who depends on whom
-      const inDegree = new Map<string, number>();
-      const dependents = new Map<string, string[]>();
-      for (const n of nodes) {
-        inDegree.set(n.id, 0);
-        dependents.set(n.id, []);
-      }
-      for (const l of links) {
-        inDegree.set(l.target, (inDegree.get(l.target) || 0) + 1);
-        if (!dependents.has(l.source)) dependents.set(l.source, []);
-        dependents.get(l.source)!.push(l.target);
-      }
-
-      // Kahn's algorithm for topological sort
-      const queue: string[] = [];
-      const order = new Map<string, number>();
-      for (const [id, deg] of inDegree) {
-        if (deg === 0) queue.push(id);
-      }
-
-      let level = 1;
-      while (queue.length > 0) {
-        const batch = [...queue];
-        queue.length = 0;
-        for (const id of batch) {
-          order.set(id, level);
-          for (const dep of (dependents.get(id) || [])) {
-            const newDeg = (inDegree.get(dep) || 1) - 1;
-            inDegree.set(dep, newDeg);
-            if (newDeg === 0) queue.push(dep);
+    const run = async () => {
+      try {
+        let sourceSession: SessionDocument;
+        if (sessionId) {
+          const loaded = await resolveSessionPayload(sessionId, draft);
+          if (!loaded) {
+            return res.status(404).json({ error: "Session not found." });
           }
+          sourceSession = loaded;
+        } else {
+          if (!graph || !graph.nodes) {
+            return res.status(400).json({ error: "Missing 'graph' field." });
+          }
+          sourceSession = createEphemeralSession({ graph, manifesto, architecture });
         }
-        level++;
-      }
 
-      // Assign computed priority
-      for (const n of nodes) {
-        if (!n.priority) {
-          n.priority = order.get(n.id) || 1;
-        }
-      }
-
-      // Group by priority phase
-      const phases = new Map<number, typeof nodes>();
-      for (const n of nodes) {
-        const p = n.priority || 1;
-        if (!phases.has(p)) phases.set(p, []);
-        phases.get(p)!.push(n);
-      }
-
-      // Generate .omx/plan.md
-      const planLines: string[] = [
-        `# OMX Execution Plan`,
-        ``,
-        `> Auto-generated from RETROBUILDER blueprint`,
-        `> Manifesto: ${(manifesto || 'Not specified').substring(0, 200)}`,
-        ``,
-      ];
-
-      const sortedPhases = [...phases.keys()].sort((a, b) => a - b);
-      const phaseNames = ['', 'Foundation', 'Core Services', 'Integration', 'Interface', 'Polish', 'Optimization'];
-
-      for (const p of sortedPhases) {
-        const phaseName = phaseNames[Math.min(p, phaseNames.length - 1)] || `Phase ${p}`;
-        planLines.push(`## Phase ${p}: ${phaseName} (priority ${p})`);
-        planLines.push('');
-
-        for (const n of phases.get(p)!) {
-          planLines.push(`### ${n.label}`);
-          planLines.push(`- **Type:** ${n.type}`);
-          planLines.push(`- **Description:** ${n.description}`);
-          if (n.data_contract) {
-            planLines.push(`- **Data Contract:** ${n.data_contract}`);
-          }
-          if (n.decision_rationale) {
-            planLines.push(`- **Rationale:** ${n.decision_rationale}`);
-          }
-
-          // Dependencies
-          const deps = links.filter((l: any) => l.target === n.id).map((l: any) => {
-            const src = nodes.find((nn: any) => nn.id === l.source);
-            return src ? src.label : l.source;
+        const readiness = await analyzeSessionReadiness(sourceSession);
+        if (!readiness.exportAllowed) {
+          return res.status(409).json({
+            error: "Blueprint is blocked and cannot be exported to Ralph yet.",
+            readiness,
           });
-          if (deps.length > 0) {
-            planLines.push(`- **Depends on:** ${deps.join(', ')}`);
-          }
-
-          // Acceptance criteria — the key for Ralph
-          if (n.acceptance_criteria && n.acceptance_criteria.length > 0) {
-            planLines.push(`- **Acceptance Criteria:**`);
-            for (const ac of n.acceptance_criteria) {
-              planLines.push(`  - [ ] ${ac}`);
-            }
-          }
-
-          // Error handling
-          if (n.error_handling && n.error_handling.length > 0) {
-            planLines.push(`- **Error Handling:**`);
-            for (const eh of n.error_handling) {
-              planLines.push(`  - ${eh}`);
-            }
-          }
-
-          planLines.push('');
         }
+
+        // Topological sort: compute priority from links if not already set
+        const nodes = [...sourceSession.graph.nodes];
+        const links = sourceSession.graph.links || [];
+
+        // Build adjacency: who depends on whom
+        const inDegree = new Map<string, number>();
+        const dependents = new Map<string, string[]>();
+        for (const n of nodes) {
+          inDegree.set(n.id, 0);
+          dependents.set(n.id, []);
+        }
+        for (const l of links) {
+          inDegree.set(l.target, (inDegree.get(l.target) || 0) + 1);
+          if (!dependents.has(l.source)) dependents.set(l.source, []);
+          dependents.get(l.source)!.push(l.target);
+        }
+
+        // Kahn's algorithm for topological sort
+        const queue: string[] = [];
+        const order = new Map<string, number>();
+        for (const [id, deg] of inDegree) {
+          if (deg === 0) queue.push(id);
+        }
+
+        let level = 1;
+        while (queue.length > 0) {
+          const batch = [...queue];
+          queue.length = 0;
+          for (const id of batch) {
+            order.set(id, level);
+            for (const dep of (dependents.get(id) || [])) {
+              const newDeg = (inDegree.get(dep) || 1) - 1;
+              inDegree.set(dep, newDeg);
+              if (newDeg === 0) queue.push(dep);
+            }
+          }
+          level++;
+        }
+
+        for (const n of nodes) {
+          if (!n.priority) {
+            n.priority = order.get(n.id) || 1;
+          }
+        }
+
+        const phases = new Map<number, typeof nodes>();
+        for (const n of nodes) {
+          const p = n.priority || 1;
+          if (!phases.has(p)) phases.set(p, []);
+          phases.get(p)!.push(n);
+        }
+
+        const planLines: string[] = [
+          `# OMX Execution Plan`,
+          ``,
+          `> Auto-generated from RETROBUILDER blueprint`,
+          `> Manifesto: ${(sourceSession.manifesto || 'Not specified').substring(0, 200)}`,
+          ``,
+        ];
+
+        const sortedPhases = [...phases.keys()].sort((a, b) => a - b);
+        const phaseNames = ['', 'Foundation', 'Core Services', 'Integration', 'Interface', 'Polish', 'Optimization'];
+
+        for (const p of sortedPhases) {
+          const phaseName = phaseNames[Math.min(p, phaseNames.length - 1)] || `Phase ${p}`;
+          planLines.push(`## Phase ${p}: ${phaseName} (priority ${p})`);
+          planLines.push('');
+
+          for (const n of phases.get(p)!) {
+            planLines.push(`### ${n.label}`);
+            planLines.push(`- **Type:** ${n.type}`);
+            planLines.push(`- **Description:** ${n.description}`);
+            if (n.data_contract) {
+              planLines.push(`- **Data Contract:** ${n.data_contract}`);
+            }
+            if (n.decision_rationale) {
+              planLines.push(`- **Rationale:** ${n.decision_rationale}`);
+            }
+
+            const deps = links.filter((l: any) => l.target === n.id).map((l: any) => {
+              const src = nodes.find((nn: any) => nn.id === l.source);
+              return src ? src.label : l.source;
+            });
+            if (deps.length > 0) {
+              planLines.push(`- **Depends on:** ${deps.join(', ')}`);
+            }
+
+            if (n.acceptance_criteria && n.acceptance_criteria.length > 0) {
+              planLines.push(`- **Acceptance Criteria:**`);
+              for (const ac of n.acceptance_criteria) {
+                planLines.push(`  - [ ] ${ac}`);
+              }
+            }
+
+            if (n.error_handling && n.error_handling.length > 0) {
+              planLines.push(`- **Error Handling:**`);
+              for (const eh of n.error_handling) {
+                planLines.push(`  - ${eh}`);
+              }
+            }
+
+            planLines.push('');
+          }
+        }
+
+        const agentsLines: string[] = [
+          `# AGENTS.md`,
+          ``,
+          `> Auto-generated from RETROBUILDER blueprint`,
+          ``,
+          `## Project Overview`,
+          sourceSession.manifesto || 'No manifesto provided.',
+          ``,
+          `## Architecture`,
+          sourceSession.architecture || 'No architecture specified.',
+          ``,
+          `## Build Order`,
+          `Execute modules in priority order. Lower numbers are built first.`,
+          `Do NOT start a higher-priority module until all its dependencies are verified.`,
+          ``,
+          `## Verification Rules`,
+          `- Each module has explicit acceptance criteria`,
+          `- A module is COMPLETE only when ALL acceptance criteria pass`,
+          `- Run tests after each module completion`,
+          `- If a criterion fails, fix and re-verify before proceeding`,
+          ``,
+          `## Module Summary`,
+        ];
+
+        for (const n of nodes.sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0))) {
+          agentsLines.push(`- **${n.label}** (P${n.priority || '?'}, ${n.type}): ${n.description.substring(0, 100)}`);
+        }
+
+        const plan = planLines.join('\n');
+        const agents = agentsLines.join('\n');
+
+        res.json({
+          plan,
+          agents,
+          readiness,
+          stats: {
+            totalNodes: nodes.length,
+            totalPhases: sortedPhases.length,
+            totalAcceptanceCriteria: nodes.reduce((sum: number, n: any) => sum + (n.acceptance_criteria?.length || 0), 0),
+            buildOrder: nodes
+              .sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0))
+              .map((n: any) => ({ id: n.id, label: n.label, priority: n.priority })),
+          },
+        });
+      } catch (e: any) {
+        console.error("[SSOT] Failed to export OMX plan:", e.message);
+        res.status(500).json({ error: e.message || "Failed to export OMX plan" });
       }
+    };
 
-      // Generate AGENTS.md
-      const agentsLines: string[] = [
-        `# AGENTS.md`,
-        ``,
-        `> Auto-generated from RETROBUILDER blueprint`,
-        ``,
-        `## Project Overview`,
-        manifesto || 'No manifesto provided.',
-        ``,
-        `## Architecture`,
-        architecture || 'No architecture specified.',
-        ``,
-        `## Build Order`,
-        `Execute modules in priority order. Lower numbers are built first.`,
-        `Do NOT start a higher-priority module until all its dependencies are verified.`,
-        ``,
-        `## Verification Rules`,
-        `- Each module has explicit acceptance criteria`,
-        `- A module is COMPLETE only when ALL acceptance criteria pass`,
-        `- Run tests after each module completion`,
-        `- If a criterion fails, fix and re-verify before proceeding`,
-        ``,
-        `## Module Summary`,
-      ];
-
-      for (const n of nodes.sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0))) {
-        agentsLines.push(`- **${n.label}** (P${n.priority || '?'}, ${n.type}): ${n.description.substring(0, 100)}`);
-      }
-
-      const plan = planLines.join('\n');
-      const agents = agentsLines.join('\n');
-
-      res.json({
-        plan,
-        agents,
-        stats: {
-          totalNodes: nodes.length,
-          totalPhases: sortedPhases.length,
-          totalAcceptanceCriteria: nodes.reduce((sum: number, n: any) => sum + (n.acceptance_criteria?.length || 0), 0),
-          buildOrder: nodes
-            .sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0))
-            .map((n: any) => ({ id: n.id, label: n.label, priority: n.priority })),
-        },
-      });
-    } catch (e: any) {
-      console.error("[SSOT] Failed to export OMX plan:", e.message);
-      res.status(500).json({ error: e.message || "Failed to export OMX plan" });
-    }
+    run();
   });
 
   // ─── Deep Research (enriched with m1nd) ──────────────────────────

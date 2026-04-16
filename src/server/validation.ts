@@ -5,6 +5,28 @@
 
 import { z } from 'zod';
 
+const stringArrayish = z.union([z.array(z.string()), z.string()]).transform((value) => {
+  if (Array.isArray(value)) return value.map((item) => item.trim()).filter(Boolean);
+  return value
+    .split(/\n|;|•|-/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+});
+
+const stringish = z.union([z.string(), z.record(z.string(), z.any())]).transform((value) => {
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
+});
+
+const safeNumber = z.preprocess((value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}, z.number().optional());
+
 // ─── Node & Link Schemas ─────────────────────────────────────────────
 
 export const NodeDataSchema = z.object({
@@ -27,12 +49,12 @@ export const NodeDataSchema = z.object({
     };
     return map[t] || 'backend';
   }),
-  data_contract: z.string().optional(),
-  decision_rationale: z.string().optional(),
-  acceptance_criteria: z.array(z.string()).optional(),
-  error_handling: z.array(z.string()).optional(),
-  priority: z.number().optional(),
-  group: z.number().default(0),
+  data_contract: stringish.optional(),
+  decision_rationale: stringish.optional(),
+  acceptance_criteria: stringArrayish.optional(),
+  error_handling: stringArrayish.optional(),
+  priority: safeNumber,
+  group: safeNumber.default(0),
 });
 
 export const LinkDataSchema = z.object({
@@ -46,11 +68,49 @@ export const GraphDataSchema = z.object({
   links: z.array(LinkDataSchema).default([]),
 });
 
+export const SessionSourceSchema = z.enum(['manual', 'imported_codebase']);
+
+export const CodebaseImportMetaSchema = z.object({
+  sourcePath: z.string(),
+  importedAt: z.string(),
+  confidence: z.number(),
+  notes: z.array(z.string()).default([]),
+  summary: z.string().optional(),
+  sourceStats: z.object({
+    totalFiles: z.number().optional(),
+    totalLoc: z.number().optional(),
+    topFiles: z.array(z.string()).optional(),
+  }).optional(),
+});
+
+export const SessionDocumentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  source: SessionSourceSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  manifesto: stringish.default(''),
+  architecture: stringish.default(''),
+  graph: GraphDataSchema,
+  projectContext: z.string().default(''),
+  importMeta: CodebaseImportMetaSchema.optional(),
+});
+
+export const SessionPatchSchema = z.object({
+  name: z.string().optional(),
+  source: SessionSourceSchema.optional(),
+  manifesto: stringish.optional(),
+  architecture: stringish.optional(),
+  graph: GraphDataSchema.optional(),
+  projectContext: z.string().optional(),
+  importMeta: CodebaseImportMetaSchema.optional(),
+});
+
 // ─── Endpoint-specific Response Schemas ──────────────────────────────
 
 export const SystemStateSchema = z.object({
-  manifesto: z.string().default(''),
-  architecture: z.string().default(''),
+  manifesto: stringish.default(''),
+  architecture: stringish.default(''),
   graph: GraphDataSchema,
 });
 
