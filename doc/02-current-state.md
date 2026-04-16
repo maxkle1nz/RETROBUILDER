@@ -1,11 +1,11 @@
 # Current State of the System
 
-As of v2.5.0, the following features and components have been implemented:
+As of v0.4.0 (2026-04-16), the following features and components are implemented:
 
 ## 1. Frontend Interface (UI/UX)
 - **Premium Typography:** Orbitron (display/header), Inter (UI), JetBrains Mono (code/terminal) — loaded from Google Fonts.
 - **Cyberpunk Aesthetic:** Dark theme with neon accents, animated grid pulse background, CRT scanlines overlay, smooth transitions.
-- **2D Graph Visualization:** Uses `@xyflow/react` (React Flow) for interactive node graphs with auto-layout (dagre).
+- **2D Graph Visualization:** Uses `@xyflow/react` (React Flow v12) for interactive node graphs with auto-layout (dagre).
 - **Dual Modes (Header Switcher):** Toggle between **ARCHITECT** and **M1ND** modes. M1ND mode shifts the entire UI to purple tones via CSS variable override (`data-mode="m1nd"`).
 - **Live Header Stats:** Real-time uptime counter, live SYNC% (completed/total nodes), node count, version badge. No hardcoded data.
 - **Dynamic Right Panel:** Sliding panel for node analysis, m1nd integration, blast radius highlighting.
@@ -18,28 +18,65 @@ As of v2.5.0, the following features and components have been implemented:
 - **Keyboard Shortcuts:** ⌘Z (undo), ⌘⇧Z (redo), Esc (close panels), ⌘1/⌘2 (mode switch).
 - **Error Boundaries:** App-level and GraphView-level boundaries prevent white-screen crashes.
 - **Persistent State:** `zustand/persist` saves graph, manifesto, architecture, and mode to `localStorage`.
+- **Priority Badges:** P1/P2/P3 build order indicators rendered on CyberNode components.
+- **AC Indicators:** Acceptance criteria count displayed on each node.
+- **OMX Export Button:** "Export to OMX" in the M1ND RightPanel generates a downloadable `.omx/plan.md` for autonomous materialization.
 
 ## 2. Backend API (Express)
 - **Secure API Gateway:** Express.js server (`server.ts`) with all AI keys server-side only.
 - **Rate Limiting:** `express-rate-limit` at 20 req/min per IP on all `/api/ai/*` routes.
 - **Input Validation:** All POST body fields validated; returns `400` on failure.
-- **Schema Validation:** Zod schemas (`src/server/validation.ts`) for all AI responses with graceful defaults.
+- **Schema Validation:** Zod v4 schemas (`src/server/validation.ts`) for all AI responses with graceful defaults.
 - **AI Endpoints:**
   - `/api/ai/generateGraphStructure` — DAG generation from prompts
   - `/api/ai/generateProposal` — Modification plan proposals
   - `/api/ai/applyProposal` — Execute proposals against current graph
   - `/api/ai/analyzeArchitecture` — Structural audit and optimization
-  - `/api/ai/performDeepResearch` — Deep research on individual modules
+  - `/api/ai/performDeepResearch` — Multi-source deep research on individual modules
 
 ## 3. AI Integration (SSOT Provider Layer)
 - **Provider Factory:** `src/server/providers/` with provider-agnostic factory pattern.
-- **Active Provider:** xAI Grok (`grok-3-mini`) via `https://api.x.ai/v1`.
-- **Secondary Provider:** THE BRIDGE (local proxy) via `http://127.0.0.1:7788/v1`.
-- Provider selection via `AI_PROVIDER` environment variable (`xai` | `bridge`).
+- **Three Providers:**
+  - `xai` — X.AI Grok via `https://api.x.ai/v1` (OpenAI SDK)
+  - `openai` — Direct OpenAI API
+  - `bridge` — Local proxy via [THE BRIDGE](https://github.com/maxkle1nz/thebridge) at `http://127.0.0.1:7788/v1` (zero API keys, includes Copilot/Codex models)
+- **Runtime Model Selector:** Switch providers and models without restart via floating config panel.
+- **Live Model Discovery:** `/api/providers` endpoint lists available models per provider.
+- Provider selection via `AI_PROVIDER` environment variable (`xai` | `openai` | `bridge`) or runtime API.
 - Structured JSON output formatting for valid graph data.
 
 ## 4. m1nd Engine Integration
-- **WebSocket Client:** `M1ndClient` (`src/lib/m1nd.ts`) connects to local MCP WebSocket proxy.
-- **Core Actions:** `activate`, `warmup`, `impact`, `predict`, `hypothesize`.
+- **Server-Side MCP Bridge:** `M1ndBridge` class (`src/server/m1nd-bridge.ts`) spawns `m1nd-mcp` as a child process and communicates via JSON-RPC 2.0 over stdin/stdout (MCP stdio transport).
+- **HTTP API (14 endpoints):** `/api/m1nd/*` for health, activate, impact, predict, validate, diagram, layers, metrics, panoramic, search, hypothesize, missing, ingest, and structural-context.
+- **Frontend HTTP Client:** `M1ndClient` class (`src/lib/m1nd.ts`) communicates with the backend at `/api/m1nd/*`. No direct WebSocket — the Express server handles process management and reconnection.
+- **Structural Injection:** Kreator proposals are grounded in m1nd blast radius and co-change prediction data.
 - **Blast Radius Visualization:** Red pulse for blast origin, orange glow for impact zone nodes.
-- **UI Integration:** M1ND mode routes chat through `m1nd.activate()` with results in chat history.
+- **M1ND Mode UI:** RightPanel provides 6 analysis action buttons (Impact, Predict, Validate, Layers, Metrics, Diagram) with result display.
+- **Graceful Degradation:** All m1nd calls return `null` on failure — the Kreator continues without structural awareness.
+
+## 5. Deep Research Engine
+- **Multi-Source Research:** `src/server/web-research.ts` integrates:
+  - Perplexity AI (sonar model)
+  - Serper Web + Scholar Search
+  - Semantic Scholar API
+  - CrossRef API
+  - GitHub Code Search
+  - Jina Reader (URL → structured text)
+- **Document Bindings:** Research results are cross-referenced with m1nd graph nodes.
+- **API Endpoint:** `/api/ai/performDeepResearch` with timeout-protected fetches.
+
+## 6. OMX Bridge (v0.4.0)
+- **Export Pipeline:** Topological sort (Kahn's algorithm) computes build priority from dependency edges.
+- **Acceptance Criteria:** 2–5 testable conditions per module, enforced via Zod schema and generated by AI.
+- **Error Handling Models:** Failure modes and circuit-breaker strategies per node.
+- **Output Format:** `.omx/plan.md` for autonomous materialization by OMX `$ralph`.
+
+## Tech Stack Summary
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, Vite 6, Tailwind 4, Zustand 5, @xyflow/react 12, Three.js, Framer Motion |
+| Backend | Express 4, tsx, Node.js |
+| AI | OpenAI SDK 6 (xAI, OpenAI, Bridge) |
+| Validation | Zod 4 |
+| Graph Engine | m1nd MCP (stdio child process) |
+| Research | Perplexity, Serper, Semantic Scholar, CrossRef, GitHub, Jina |
