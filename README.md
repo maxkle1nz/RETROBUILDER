@@ -7,7 +7,7 @@
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[Getting Started](#getting-started) · [Architecture](#architecture) · [Features](#features) · [OMX Integration](#omx-integration) · [M1ND Mode](#m1nd-mode) · [Documentation](#documentation)
+[Getting Started](#getting-started) · [Architecture](#architecture) · [Features](#features) · [BU1LDER Mode](#builder-mode) · [OMX Integration](#omx-integration) · [M1ND Mode](#m1nd-mode) · [Documentation](#documentation)
 
 </div>
 
@@ -25,10 +25,10 @@ Most AI coding tools start from code. **RETROBUILDER starts from architecture.**
 
 The problem with jumping straight to code is that LLMs produce working files but lose the structural intent — which module depends on which, where data flows, what must be tested first. By the time you realize the architecture is wrong, you've already generated thousands of lines.
 
-RETROBUILDER keeps you at the **blueprint level** until the architecture is right, then exports a machine-consumable execution plan that autonomous agents (like [OMX](https://ohmycodex.com)) can follow phase-by-phase.
+RETROBUILDER keeps you at the **blueprint level** until the architecture is right, then exports a machine-consumable execution plan that autonomous agents (like [OMX](https://ohmycodex.com)) can follow phase-by-phase — while you watch the construction happen in real-time.
 
 ```
-You describe → RETROBUILDER architects → You validate → OMX builds
+You describe → RETROBUILDER architects → You validate → BU1LDER visualizes → OMX builds
 ```
 
 ## Getting Started
@@ -90,7 +90,7 @@ You can switch providers at runtime via the Model Selector panel in the UI — n
 │                         │  HTTP                             │
 ├─────────────────────────┼───────────────────────────────────┤
 │                    API Gateway                              │
-│  Express.js · 14 /api/m1nd/* · /api/ai/* · /api/export/*   │
+│  Express.js · 14 /api/m1nd/* · /api/ai/* · /api/omx/* · /api/export/*  │
 │                                                             │
 │  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐    │
 │  │SSOT Provider  │  │ M1ND Bridge│  │  Web Research    │    │
@@ -152,7 +152,17 @@ Export your curated blueprint for autonomous materialization by [OMX](https://oh
 - Animated 2D DAG with React Flow
 - Priority badges (P1, P2...) and acceptance criteria indicators on nodes
 - Blast radius highlighting (red origin, orange impact zone)
-- Mode-specific UI (Architect vs M1ND)
+- Mode-specific UI (Architect cyan → M1ND purple → BU1LDER green)
+
+### 🔨 BU1LDER — Live Construction Visualization (v0.5.0)
+Watch your blueprint come to life in real-time:
+- **Dark-to-light nodes** — start completely dark, illuminate as OMX builds each module
+- **Shimmer animation** — active build nodes pulse with a scanning light effect
+- **Propagation rings** — completion sends a ring burst along edges to dependent nodes
+- **Build Console** — structured log feed with phase tracking and file-level progress
+- **MiniMap illumination** — the minimap lights up as the build wave propagates
+- **Mission Complete** — final summary with files written, lines generated, and elapsed time
+- **SSE streaming** — real-time Server-Sent Events with exponential backoff reconnect
 
 ## OMX Integration
 
@@ -163,7 +173,12 @@ RETROBUILDER (design + validate)
     │
     ▼  User clicks "Export to OMX"
     │
-    ▼  Downloads omx-plan.md
+    ▼  Downloads omx-plan.md + enters BU1LDER Mode
+    │
+    ▼  BU1LDER shows real-time construction
+    │  ● Nodes illuminate dark → light
+    │  ● Build Console streams logs
+    │  ● MiniMap shows propagation wave
     │
 OMX (autonomous materialization)
     │  $ralph "execute the plan"

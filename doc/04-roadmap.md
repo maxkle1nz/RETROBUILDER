@@ -1,6 +1,6 @@
 # Roadmap & Pending Tasks
 
-Progress at v0.4.0: **~75% of original roadmap complete**. All 5 foundational objectives are met. Items 3 and 4 are fully closed. Items 1, 2, and 5 have remaining work.
+Progress at v0.5.0: **~85% of original roadmap complete**. Items 3, 4, and 8 (BU1LDER) are fully closed. Items 1, 2, 5, and 6 have remaining work.
 
 ---
 
@@ -82,11 +82,11 @@ Progress at v0.4.0: **~75% of original roadmap complete**. All 5 foundational ob
 | Sub-item | Severity | Status | Notes |
 |---|---|---|---|
 | Server-Side Cycle Detection | P1 | ❌ Pending | `applyProposal` must throw if it detects cyclic dependencies |
-| OMX Bootstrapping (Phase 0) | P1 | ❌ Pending | OMX planner assumes implicit package.json/docker/setup environments. Must instruct initial command scaffolds. |
+| OMX Bootstrapping (Phase 0) | P1 | 🟡 Partial | BU1LDER simulation handles it; real OMX needs scaffolding commands |
 | Batch Research Queue | P2 | ❌ Pending | Deep Research takes too long node-by-node (rate limiting) |
 | Donor Logic Checking | P2 | ❌ Pending | Validating incompatible cross-stack logic |
 
-**Remaining work:** Cycle detection in generation; OMX missing context bootstrapping; Batch endpoint creation.
+**Remaining work:** Cycle detection in generation; real OMX context bootstrapping; Batch endpoint creation.
 
 ---
 
@@ -102,3 +102,30 @@ Features shipped that exceeded the original scope:
 | OMX Export Bridge | v0.4.0 | Autonomous materialization pipeline |
 | Topological Sort (Kahn's) | v0.4.0 | Build priority from dependency edges |
 | Acceptance Criteria (Zod-enforced) | v0.4.0 | 2–5 testable conditions per module |
+| Design System Unification | v0.4.1 | Semantic color tokens, unified rounding, mode-adaptive glows |
+| **BU1LDER Live Construction** | **v0.5.0** | **Real-time SSE build visualization with dark-to-light node states** |
+| **Build Console** | **v0.5.0** | **Structured log feed + Mission Complete metrics screen** |
+| **3-Mode System** | **v0.5.0** | **ARCHITECT → M1ND → BU1LDER with full UIX color theming** |
+
+---
+
+## 8. BU1LDER — Live Construction Environment ✅ CLOSED (v0.5.0)
+**Objective:** Real-time visualization of autonomous build execution — blueprint nodes illuminate as OMX materializes them.
+
+| Sub-item | Status | Notes |
+|---|---|---|
+| `useBuildStore` (Zustand) | ✅ Done | Node state machine: dormant → queued → building → complete → error |
+| `useOMXStream` (SSE hook) | ✅ Done | Server-Sent Events with exponential backoff reconnect |
+| `CyberNodeBuild` (node overlay) | ✅ Done | Dark-to-light flood fill, shimmer animation, propagation ring |
+| `BuildConsole` (log feed) | ✅ Done | Animated log entries, active node progress, Mission Complete screen |
+| `BuildView` (canvas) | ✅ Done | ReactFlow with build-mode nodes, MiniMap illumination, dormant overlay |
+| `omx-runner.ts` (server) | ✅ Done | Topological sort + SSE simulation engine with realistic file names |
+| SSE endpoint | ✅ Done | `GET /api/omx/stream/:sessionId` with 15s keepalive |
+| Header BU1LDER tab | ✅ Done | Green accent, Hammer icon, mode-specific header styling |
+| CSS overrides | ✅ Done | `[data-mode="builder"]` green accent + grid pulse + keyframes |
+| Build Tracker Checklist | ✅ Done | Dual-mode: standard phases + live node-by-node tracking |
+| ChatFooter integration | ✅ Done | BU1LDER mode label, green focus glow, green send button |
+| Export → Build trigger | ✅ Done | "Export to Ralph" activates Build Mode automatically |
+| ⌘+3 shortcut | ✅ Done | Keyboard shortcut for instant Build Mode access |
+
+**No remaining work — BU1LDER is feature-complete.**
