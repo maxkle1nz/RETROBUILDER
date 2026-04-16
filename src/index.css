@@ -9,6 +9,14 @@
   --color-text-main: #e0e6ed;
   --color-text-dim: #8892a0;
   --color-border-subtle: rgba(255, 255, 255, 0.08);
+
+  /* Semantic state tokens */
+  --color-success: #50fa7b;
+  --color-warning: #ffcb6b;
+  --color-danger: #ff5c7a;
+  --color-danger-hard: #ff003c;
+  --color-info: #8be9fd;
+
   --font-sans: 'Inter', 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'Courier New', Courier, monospace;
   --font-display: 'Orbitron', 'Inter', sans-serif;
@@ -90,4 +98,11 @@
     linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
   animation: gridPulse 4s ease-in-out infinite;
+}
+
+/* M1ND mode grid pulse — switches to purple */
+[data-mode="m1nd"] .grid-pulse {
+  background-image: 
+    linear-gradient(rgba(176, 38, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(176, 38, 255, 0.03) 1px, transparent 1px);
 }

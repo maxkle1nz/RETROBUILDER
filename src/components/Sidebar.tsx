@@ -69,7 +69,7 @@ export default function Sidebar() {
                 onClick={() => setActiveTab('architecture')}
                 className={`flex-1 py-3 text-[10px] uppercase tracking-widest font-bold transition-colors border-b-2 ${activeTab === 'architecture' ? 'border-accent text-accent' : 'border-transparent text-text-dim hover:text-text-main'}`}
               >
-                Arch
+                Architecture
               </button>
             </div>
             
@@ -81,7 +81,7 @@ export default function Sidebar() {
                       <button 
                         onClick={handleAnalyze}
                         disabled={analyzing}
-                        className="w-full py-2.5 px-4 bg-[rgba(255,0,60,0.1)] border border-[#ff003c]/30 hover:bg-[#ff003c]/20 disabled:opacity-50 text-[#ff003c] rounded-[4px] flex items-center justify-center gap-2 transition-colors text-[11px] font-bold uppercase tracking-wider cursor-pointer"
+                        className="w-full py-2.5 px-4 bg-[rgba(255,0,60,0.08)] border border-[#ff003c]/30 hover:bg-[#ff003c]/15 disabled:opacity-50 disabled:cursor-not-allowed text-[#ff003c] rounded flex items-center justify-center gap-2 transition-colors text-[11px] font-bold uppercase tracking-wider cursor-pointer"
                       >
                         {analyzing ? <Loader2 size={14} className="animate-spin" /> : <Activity size={14} />}
                         {analyzing ? 'Auditing...' : 'Analyze Architecture'}
@@ -105,13 +105,13 @@ export default function Sidebar() {
                         {analysisResult.critique}
                       </p>
                       {!analysisResult.isGood && analysisResult.optimizedGraph && (
-                        <button 
-                          onClick={applyOptimizedGraph}
-                          className="w-full py-2 bg-[#ff003c] text-white rounded text-[10px] font-bold uppercase tracking-wider hover:bg-red-600 transition-colors cursor-pointer"
-                        >
-                          Apply Auto-Fix
-                        </button>
-                      )}
+                          <button 
+                            onClick={applyOptimizedGraph}
+                            className="w-full py-2 bg-[#ff003c]/10 border border-[#ff003c]/40 text-[#ff003c] rounded text-[10px] font-bold uppercase tracking-wider hover:bg-[#ff003c]/20 transition-colors cursor-pointer"
+                          >
+                            Apply Auto-Fix
+                          </button>
+                        )}
                     </motion.div>
                   )}
 

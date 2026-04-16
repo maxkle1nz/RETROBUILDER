@@ -129,8 +129,7 @@ export default function ModelSelector() {
       {/* Floating Panel */}
       {isOpen && (
         <div 
-          className="absolute bottom-full mb-2 right-0 w-[320px] bg-[#0a0b0f] border border-accent/30 rounded shadow-[0_0_30px_rgba(0,242,255,0.1)] z-[9999] overflow-hidden"
-          style={{ backdropFilter: 'blur(20px)' }}
+          className="absolute bottom-full mb-2 right-0 w-[320px] bg-[#0a0b0f] border border-accent/30 rounded shadow-[0_0_30px_rgba(0,242,255,0.1)] z-[9999] overflow-hidden backdrop-blur-xl"
         >
           {/* Header */}
           <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
@@ -174,10 +173,12 @@ export default function ModelSelector() {
                     ) : (
                       <Globe size={12} className={p.name === activeProvider ? 'text-accent' : 'text-text-dim'} />
                     )}
-                    <div>
+                  <div>
                       <div className="text-[11px] font-bold">{p.label}</div>
                       <div className="text-[8px] opacity-60">
-                        {p.error ? <span className="text-red-400">No API Key</span> : p.defaultModel || 'auto'}
+                        {p.error
+                          ? <span className="text-red-400">{p.status === 'blocked' ? 'Blocked' : p.status === 'offline' ? 'Offline' : 'Unavailable'}</span>
+                          : p.defaultModel || 'auto'}
                       </div>
                     </div>
                   </div>
@@ -189,7 +190,7 @@ export default function ModelSelector() {
           </div>
 
           {/* Model Section */}
-          <div className="px-4 py-3 max-h-[240px] overflow-y-auto scrollbar-thin">
+          <div className="px-4 py-3 max-h-[240px] overflow-y-auto custom-scrollbar">
             <div className="text-[8px] uppercase tracking-[0.25em] text-text-dim mb-2 font-bold">
               Model — {activeProviderInfo?.label || activeProvider}
             </div>

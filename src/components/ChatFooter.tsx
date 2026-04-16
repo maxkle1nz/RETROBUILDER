@@ -308,8 +308,10 @@ export default function ChatFooter() {
                   ? "Describe the system you want to build..." 
                   : "Ask to modify the graph topology or explain behavior..."
             }
-            className={`w-full h-full bg-bg border rounded-lg p-3 text-text-main font-mono text-[12px] resize-none outline-none custom-scrollbar transition-colors duration-300 ${
-              isM1ndMode ? 'border-[#b026ff]/30 focus:border-[#b026ff]' : 'border-border-subtle focus:border-accent'
+            className={`w-full h-full bg-bg border rounded-lg p-3 text-text-main font-mono text-[12px] resize-none outline-none custom-scrollbar transition-all duration-300 ${
+              isM1ndMode 
+                ? 'border-[#b026ff]/30 focus:border-[#b026ff] focus:shadow-[0_0_12px_rgba(176,38,255,0.2)]' 
+                : 'border-border-subtle focus:border-accent focus:shadow-[0_0_12px_rgba(0,242,255,0.15)]'
             }`}
           />
           <button 

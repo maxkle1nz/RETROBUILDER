@@ -252,7 +252,7 @@ export default function RightPanel() {
           <button
             onClick={handleExport}
             disabled={exporting || !readiness.exportAllowed}
-            className="flex items-center gap-2 bg-[#50fa7b]/10 border border-[#50fa7b]/30 text-[#50fa7b] px-3 py-2 rounded text-[10px] uppercase tracking-widest font-bold disabled:opacity-50"
+            className="flex items-center gap-2 bg-[#50fa7b]/10 border border-[#50fa7b]/30 text-[#50fa7b] px-3 py-2 rounded text-[10px] uppercase tracking-widest font-bold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={12} />
             {exporting ? 'Exporting...' : 'Export to Ralph'}
@@ -448,7 +448,7 @@ export default function RightPanel() {
         <button
           onClick={runResearch}
           disabled={loading}
-          className="w-full py-3 bg-accent/10 border border-accent/30 hover:bg-accent/20 text-accent rounded text-[11px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full py-3 bg-accent/10 border border-accent/30 hover:bg-accent/20 text-accent rounded text-[11px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Search size={14} />
           {loading ? 'Grounding...' : 'Run Grounding & Research'}
@@ -482,7 +482,7 @@ export default function RightPanel() {
               key={action}
               onClick={() => runAdvancedAction(action)}
               disabled={loading}
-              className={`flex flex-col items-center justify-center gap-2 bg-[#1a1f2b] border p-3 rounded-md hover:border-accent hover:text-accent transition-colors disabled:opacity-50 ${
+              className={`flex flex-col items-center justify-center gap-2 bg-[#1a1f2b] border p-3 rounded-md hover:border-accent hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 advancedAction === action ? 'border-accent text-accent' : 'border-border-subtle'
               }`}
             >
@@ -534,7 +534,7 @@ export default function RightPanel() {
           {appMode === 'm1nd' ? 'M1ND COCKPIT' : 'PROPERTIES'}
         </div>
         <div className="flex items-center gap-3">
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[#50fa7b] shadow-[0_0_6px_#50fa7b]' : 'bg-[#ffcb6b]'}`} title={isConnected ? 'm1nd: connected' : 'm1nd: offline'} />
+          <div className={`w-2 h-2 rounded-sm ${isConnected ? 'bg-[#50fa7b] shadow-[0_0_6px_#50fa7b]' : 'bg-[#ffcb6b]'}`} title={isConnected ? 'm1nd: connected' : 'm1nd: offline'} />
           <button onClick={closeRightPanel} className="text-text-dim hover:text-white transition-colors">
             <X size={18} />
           </button>
@@ -566,9 +566,9 @@ export default function RightPanel() {
           <div className="space-y-5">
             <div className="flex flex-wrap gap-2">
               {([
-                { id: 'ready' as PanelTab, Icon: CheckSquare, label: 'Ready for Ralph' },
-                { id: 'impact' as PanelTab, Icon: Target, label: 'Impacto' },
-                { id: 'gaps' as PanelTab, Icon: AlertTriangle, label: 'Peças Faltando' },
+                { id: 'ready' as PanelTab, Icon: CheckSquare, label: 'Ready' },
+                { id: 'impact' as PanelTab, Icon: Target, label: 'Impact' },
+                { id: 'gaps' as PanelTab, Icon: AlertTriangle, label: 'Gaps' },
                 { id: 'research' as PanelTab, Icon: Search, label: 'Grounding' },
                 { id: 'advanced' as PanelTab, Icon: Shield, label: 'Advanced' },
               ]).map(({ id, Icon, label }) => (
