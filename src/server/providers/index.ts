@@ -41,6 +41,8 @@ export interface AIProvider {
   chatCompletion(messages: ChatMessage[], config?: CompletionConfig): Promise<string>;
   /** List available models for this provider */
   listModels(): Promise<ModelInfo[]>;
+  /** Pre-warm a model connection (token exchange, HTTP keep-alive). Best-effort, non-blocking. */
+  warmModel?(model?: string): Promise<void>;
 }
 
 // ─── Provider Registry ───────────────────────────────────────────────

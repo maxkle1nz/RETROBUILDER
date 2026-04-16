@@ -97,6 +97,13 @@ export default function ModelSelector() {
   function handleModelSelect(modelId: string) {
     setActiveModel(modelId);
     toast.success(`Model: ${modelId}`);
+    
+    // Background warmup — pre-fetch auth token + establish connection
+    fetch('/api/ai/warmup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelId }),
+    }).catch(() => {}); // Best-effort, non-blocking
   }
 
   // Display label for the active model

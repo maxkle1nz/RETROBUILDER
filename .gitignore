@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 **/ingest_roots.json
+.env.local

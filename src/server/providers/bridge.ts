@@ -27,30 +27,72 @@ export function createBridgeProvider(): AIProvider {
     baseURL: BRIDGE_DEFAULT_URL,
   });
 
+  // Background warmup: pre-fetches Copilot token + establishes HTTP keep-alive
+  const warmup = async (model?: string) => {
+    try {
+      const targetModel = model || BRIDGE_DEFAULT_MODEL;
+      // 1. Health check — establishes TCP+TLS connection
+      await fetch(`${BRIDGE_BASE_URL}/health`, { signal: AbortSignal.timeout(5000) });
+      // 2. Minimal completion — forces Copilot token exchange for this provider
+      //    We send max_tokens=1 so it returns almost immediately.
+      const warmBody: any = {
+        model: targetModel,
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 1,
+        stream: false,
+      };
+      await client.chat.completions.create(warmBody).catch(() => {});
+      console.log(`[BRIDGE] ⚡ Warmed up: ${targetModel}`);
+    } catch {
+      // Warmup is best-effort — don't block anything
+    }
+  };
+
   return {
     name: 'bridge',
     label: 'THE BRIDGE (Local)',
     defaultModel: BRIDGE_DEFAULT_MODEL,
+
+    // Expose warmup for switch-provider to call
+    async warmModel(model?: string) {
+      warmup(model);
+    },
 
     async chatCompletion(
       messages: ChatMessage[],
       config?: CompletionConfig
     ): Promise<string> {
       const model = config?.model || BRIDGE_DEFAULT_MODEL;
+      const modelLower = model.toLowerCase();
 
-      const requestBody: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+      // Claude and Gemini models on Copilot don't support response_format
+      const isClaude = modelLower.includes('claude');
+      const isGemini = modelLower.includes('gemini');
+      // GPT-5.x and O-series need max_completion_tokens instead of max_tokens
+      const isNewTokenParam = modelLower.includes('gpt-5') || modelLower.includes('gpt-4.1') 
+        || modelLower.startsWith('o1') || modelLower.startsWith('o3') || modelLower.startsWith('o4');
+
+      const tokenLimit = config?.maxTokens || 16384;
+
+      const requestBody: any = {
         model,
         messages: messages.map((m) => ({
           role: m.role,
           content: m.content,
         })),
-        max_tokens: config?.maxTokens || 16384,
         temperature: config?.temperature ?? 0.7,
       };
 
-      // THE BRIDGE may or may not support JSON mode depending on
-      // the underlying provider. We try it and fall back gracefully.
-      if (config?.jsonMode) {
+      // Token parameter: GPT-5.x uses max_completion_tokens; all others use max_tokens
+      if (isNewTokenParam) {
+        requestBody.max_completion_tokens = tokenLimit;
+      } else {
+        requestBody.max_tokens = tokenLimit;
+      }
+
+      // JSON mode: only for models that support it (not Claude/Gemini on Copilot)
+      const useJsonMode = config?.jsonMode && !isClaude && !isGemini;
+      if (useJsonMode) {
         requestBody.response_format = { type: 'json_object' };
       }
 
