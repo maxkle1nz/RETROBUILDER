@@ -8,3 +8,5 @@ coverage/
 !.env.example
 **/ingest_roots.json
 .env.local
+daemon_state.json
+ingest_roots.json
