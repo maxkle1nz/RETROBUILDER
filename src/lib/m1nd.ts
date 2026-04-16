@@ -1,148 +1,133 @@
 /**
- * m1nd API Client
- * Connects to a local m1nd MCP server via a WebSocket proxy.
+ * m1nd API Client — HTTP Bridge
  * 
- * Since m1nd uses stdio transport, you need to run a WebSocket proxy locally:
- * npx @modelcontextprotocol/websockets-stdio m1nd-mcp
+ * Communicates with the m1nd MCP server through the Express backend
+ * at /api/m1nd/* endpoints. No more direct WebSocket — the server
+ * handles process management and reconnection.
+ * 
+ * All methods return null on failure for graceful degradation.
  */
 
-type MCPRequest = {
-  jsonrpc: "2.0";
-  id: number;
-  method: string;
-  params: any;
-};
-
-type MCPResponse = {
-  jsonrpc: "2.0";
-  id: number;
-  result?: any;
-  error?: any;
-};
+export interface M1ndHealthStatus {
+  connected: boolean;
+  nodeCount: number;
+  edgeCount: number;
+  graphState: string;
+}
 
 export class M1ndClient {
-  private ws: WebSocket | null = null;
-  private messageId = 1;
-  private pendingRequests = new Map<number, { resolve: (val: any) => void; reject: (err: any) => void }>();
-  private url: string;
+  private baseUrl: string;
 
-  constructor(url: string = "ws://localhost:8080") {
-    this.url = url;
+  constructor(baseUrl: string = '/api/m1nd') {
+    this.baseUrl = baseUrl;
   }
 
-  async connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(this.url);
-      
-      this.ws.onopen = () => {
-        console.log("[m1nd] Connected to MCP proxy");
-        resolve();
-      };
+  // ─── Health ────────────────────────────────────────────────────────
 
-      this.ws.onerror = (err) => {
-        console.error("[m1nd] WebSocket error:", err);
-        reject(err);
-      };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as MCPResponse;
-          if (data.id && this.pendingRequests.has(data.id)) {
-            const { resolve, reject } = this.pendingRequests.get(data.id)!;
-            this.pendingRequests.delete(data.id);
-            
-            if (data.error) reject(data.error);
-            else resolve(data.result);
-          }
-        } catch (e) {
-          console.error("[m1nd] Failed to parse message:", e);
-        }
-      };
-    });
-  }
-
-  /**
-   * Disconnect from the MCP proxy and clean up pending requests
-   */
-  disconnect(): void {
-    if (this.ws) {
-      // Reject all pending requests
-      for (const [id, { reject }] of this.pendingRequests) {
-        reject(new Error('m1nd client disconnected'));
-      }
-      this.pendingRequests.clear();
-
-      this.ws.close();
-      this.ws = null;
-      console.log("[m1nd] Disconnected from MCP proxy");
+  async health(): Promise<M1ndHealthStatus> {
+    try {
+      const res = await fetch(`${this.baseUrl}/health`);
+      if (!res.ok) return { connected: false, nodeCount: 0, edgeCount: 0, graphState: 'error' };
+      return res.json();
+    } catch {
+      return { connected: false, nodeCount: 0, edgeCount: 0, graphState: 'unreachable' };
     }
   }
 
-  private async callTool(name: string, args: any): Promise<any> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error("m1nd client not connected");
+  async isConnected(): Promise<boolean> {
+    const h = await this.health();
+    return h.connected;
+  }
+
+  // ─── Foundation ────────────────────────────────────────────────────
+
+  /** Spreading activation query across the graph */
+  async activate(query: string, topK: number = 20): Promise<any> {
+    return this.post('/activate', { query, top_k: topK });
+  }
+
+  /** Impact radius / blast analysis for a node */
+  async impact(nodeId: string, direction: string = 'forward'): Promise<any> {
+    return this.post('/impact', { node_id: nodeId, direction });
+  }
+
+  /** Co-change prediction for a modified node */
+  async predict(changedNode: string, topK: number = 10): Promise<any> {
+    return this.post('/predict', { changed_node: changedNode, top_k: topK });
+  }
+
+  // ─── Superpowers ───────────────────────────────────────────────────
+
+  /** Test structural claim against the graph */
+  async hypothesize(claim: string): Promise<any> {
+    return this.post('/hypothesize', { claim });
+  }
+
+  /** Validate a modification plan against the code graph */
+  async validatePlan(actions: Array<{ action_type: string; file_path: string }>): Promise<any> {
+    return this.post('/validate-plan', { actions });
+  }
+
+  // ─── Visualization ─────────────────────────────────────────────────
+
+  /** Generate Mermaid diagram centered on a query/node */
+  async diagram(center?: string, depth: number = 2, format: string = 'mermaid'): Promise<any> {
+    return this.post('/diagram', { center, depth, format });
+  }
+
+  /** Panoramic risk overview */
+  async panoramic(topN: number = 30): Promise<any> {
+    return this.post('/panoramic', { top_n: topN });
+  }
+
+  /** Structural metrics */
+  async metrics(scope?: string, topK: number = 30): Promise<any> {
+    return this.post('/metrics', { scope, top_k: topK });
+  }
+
+  /** Architectural layers */
+  async layers(): Promise<any> {
+    return this.post('/layers', {});
+  }
+
+  // ─── Ingest ────────────────────────────────────────────────────────
+
+  /** Ingest a codebase into m1nd */
+  async ingest(codePath: string, adapter: string = 'code', mode: string = 'replace'): Promise<any> {
+    return this.post('/ingest', { path: codePath, adapter, mode });
+  }
+
+  // ─── Document Intelligence ─────────────────────────────────────────
+
+  /** Resolve document artifacts */
+  async documentResolve(docPath?: string, nodeId?: string): Promise<any> {
+    return this.post('/document/resolve', { path: docPath, node_id: nodeId });
+  }
+
+  /** Get document-to-code bindings */
+  async documentBindings(docPath?: string, nodeId?: string): Promise<any> {
+    return this.post('/document/bindings', { path: docPath, node_id: nodeId });
+  }
+
+  /** Check document-code drift */
+  async documentDrift(docPath?: string, nodeId?: string): Promise<any> {
+    return this.post('/document/drift', { path: docPath, node_id: nodeId });
+  }
+
+  // ─── Internal ──────────────────────────────────────────────────────
+
+  private async post(endpoint: string, body: Record<string, any>): Promise<any> {
+    try {
+      const res = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      return null;
     }
-
-    const id = this.messageId++;
-    const request: MCPRequest = {
-      jsonrpc: "2.0",
-      id,
-      method: "tools/call",
-      params: {
-        name,
-        arguments: args
-      }
-    };
-
-    return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
-      this.ws!.send(JSON.stringify(request));
-      
-      // Timeout after 30s
-      setTimeout(() => {
-        if (this.pendingRequests.has(id)) {
-          this.pendingRequests.delete(id);
-          reject(new Error(`m1nd tool call '${name}' timed out`));
-        }
-      }, 30000);
-    });
-  }
-
-  // --- m1nd Core Endpoints ---
-
-  /**
-   * Spreading activation query across the graph
-   */
-  async activate(agentId: string, query: string, maxNodes: number = 50) {
-    return this.callTool("activate", { agent_id: agentId, query, max_nodes: maxNodes });
-  }
-
-  /**
-   * Task-based warmup and priming
-   */
-  async warmup(agentId: string, taskDescription: string) {
-    return this.callTool("warmup", { agent_id: agentId, task: taskDescription });
-  }
-
-  /**
-   * Impact radius / blast analysis for a node
-   */
-  async impact(agentId: string, nodeId: string) {
-    return this.callTool("impact", { agent_id: agentId, node_id: nodeId });
-  }
-
-  /**
-   * Co-change prediction for a modified node
-   */
-  async predict(agentId: string, nodeId: string) {
-    return this.callTool("predict", { agent_id: agentId, node_id: nodeId });
-  }
-
-  /**
-   * Graph-based hypothesis testing against structure
-   */
-  async hypothesize(agentId: string, hypothesis: string) {
-    return this.callTool("hypothesize", { agent_id: agentId, hypothesis });
   }
 }
 

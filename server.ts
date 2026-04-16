@@ -8,6 +8,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createProvider, getProviderNames, PROVIDER_FACTORIES, type AIProvider, type ChatMessage } from "./src/server/providers/index.js";
 import { validateAIResponse, SystemStateSchema, GraphDataSchema, AnalysisResultSchema } from "./src/server/validation.js";
+import { performWebResearch, buildResearchContext } from "./src/server/web-research.js";
+import { initM1ndBridge, getM1ndBridge, type M1ndBridge } from "./src/server/m1nd-bridge.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -16,8 +18,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let provider: AIProvider = createProvider();
 
 function extractJSON(text: string): string {
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  return match ? match[1] : text;
+  // Strip markdown code fences if present (Claude often wraps JSON in ```json ... ```)
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  let json = fenceMatch ? fenceMatch[1] : text;
+  
+  // Find the actual JSON object — skip any preamble text
+  const jsonStart = json.indexOf('{');
+  const jsonEnd = json.lastIndexOf('}');
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+    json = json.substring(jsonStart, jsonEnd + 1);
+  }
+  
+  return json.trim();
 }
 
 // ─── Rate Limiting ───────────────────────────────────────────────────
@@ -108,6 +120,12 @@ async function startServer() {
     
     try {
       provider = createProvider(newProviderName);
+      
+      // Background warmup — pre-fetch auth token + establish connection
+      if (provider.warmModel) {
+        provider.warmModel().catch(() => {});
+      }
+      
       res.json({ 
         success: true, 
         provider: provider.name, 
@@ -116,6 +134,17 @@ async function startServer() {
       });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
+    }
+  });
+
+  // Pre-warm a specific model connection (called when user selects a model in UI)
+  app.post("/api/ai/warmup", (req, res) => {
+    const { model } = req.body;
+    if (provider.warmModel) {
+      provider.warmModel(model).catch(() => {});
+      res.json({ status: 'warming', model: model || provider.defaultModel });
+    } else {
+      res.json({ status: 'not_needed', provider: provider.name });
     }
   });
 
@@ -149,10 +178,14 @@ Nodes must have:
 - type (frontend|backend|database|external|security)
 - data_contract (string, optional: what inputs it receives and outputs it returns)
 - decision_rationale (string, optional: why this architectural choice was made)
+- acceptance_criteria (string array: 2-5 testable conditions that prove this module works correctly. Each criterion must be verifiable by an autonomous agent — e.g. "POST /auth/login returns 200 with JWT for valid credentials", "Database migration creates users table with email unique index")
+- error_handling (string array, optional: how this module should handle failures — e.g. "If payment gateway timeout > 30s, circuit-break and return 503")
+- priority (number: build order computed from dependencies — 1 = foundation with no deps, higher = depends on lower priorities. Foundation layers like databases should be priority 1, services that depend on them priority 2, UI layers that depend on services priority 3+)
 - group (number for clustering)
 
 Links must have: source (node id), target (node id), label (optional string describing the data flow).
 Ensure the graph has a clear hierarchy and Single Source of Truth (SSOT). Avoid circular dependencies.
+IMPORTANT: The graph must be buildable by an autonomous agent in priority order. Lower priority numbers are built first.
 
 CRITICAL: You must return ONLY valid JSON.`
       },
@@ -179,24 +212,64 @@ CRITICAL: You must return ONLY valid JSON.`
       return res.status(400).json({ error: "Missing or invalid 'prompt' field." });
     }
 
+    // ─── Phase 0: Gather m1nd structural context (non-blocking) ───
+    const m1ndBridge = getM1ndBridge();
+    let structuralContext = '';
+    if (m1ndBridge.isConnected) {
+      try {
+        console.log(`[SSOT] 🧠 Gathering m1nd structural context for: "${prompt.substring(0, 60)}..."`);
+        const ctx = await m1ndBridge.gatherStructuralContext(prompt);
+        if (ctx) {
+          const parts: string[] = ['\n--- M1ND STRUCTURAL CONTEXT ---'];
+          if (ctx.activatedNodes.length > 0) {
+            parts.push(`Activated nodes (most relevant): ${JSON.stringify(ctx.activatedNodes.slice(0, 5).map((n: any) => n.label || n.id || n.external_id))}`);
+          }
+          if (ctx.blastRadius) {
+            parts.push(`Blast radius: ${JSON.stringify(ctx.blastRadius.blast_radius || ctx.blastRadius).substring(0, 300)}`);
+          }
+          if (ctx.coChangePredictions) {
+            parts.push(`Co-change predictions: ${JSON.stringify(ctx.coChangePredictions).substring(0, 300)}`);
+          }
+          if (ctx.riskScore) {
+            parts.push(`Risk assessment: ${JSON.stringify(ctx.riskScore).substring(0, 200)}`);
+          }
+          if (ctx.layerViolations.length > 0) {
+            parts.push(`⚠ Layer violations: ${JSON.stringify(ctx.layerViolations.slice(0, 3))}`);
+          }
+          parts.push('--- END STRUCTURAL CONTEXT ---');
+          structuralContext = parts.join('\n');
+          console.log(`[SSOT] 🧠 Structural context: ${structuralContext.length} chars`);
+        }
+      } catch (e: any) {
+        console.warn(`[SSOT] m1nd context gather failed (degrading gracefully): ${e.message}`);
+      }
+    }
+
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: `You are the KREATOR, an advanced AI system architect.
+        content: `You are the KREATOR, an advanced AI system architect with structural awareness.
 The user wants to modify the existing system architecture.
-Analyze their prompt against the current graph and manifesto.
-Respond with a concise, highly technical, cyberpunk-flavored confirmation of what exactly you are going to change (e.g., "Injecting Redis cache node to offload DB overhead", "Rewiring Auth flow for strict RBAC").
-Keep it under 3 sentences. Be direct, authoritative, and analytical. Do not use markdown formatting, just plain text.`
+Analyze their prompt against the current graph, manifesto, and any structural context provided by the m1nd graph engine.
+If structural context is available, use it to:
+- Reference specific affected modules and their blast radius
+- Warn about co-change dependencies that should be updated together
+- Flag layer violations or structural risks
+Respond with a concise, highly technical, cyberpunk-flavored confirmation of what exactly you are going to change.
+Keep it under 4 sentences. Be direct, authoritative, and analytical. Do not use markdown formatting, just plain text.`
       },
       {
         role: 'user',
-        content: `Manifesto: ${manifesto}\nCurrent Graph Nodes: ${currentGraph?.nodes?.length || 0}\nUser Prompt: ${prompt}\n\nWhat is your modification plan?`
+        content: `Manifesto: ${manifesto}\nCurrent Graph Nodes: ${currentGraph?.nodes?.length || 0}\nUser Prompt: ${prompt}${structuralContext}\n\nWhat is your modification plan?`
       }
     ];
 
     try {
       const result = await provider.chatCompletion(messages, { model });
-      res.json({ proposal: result || "Awaiting confirmation to modify system topology." });
+      res.json({
+        proposal: result || "Awaiting confirmation to modify system topology.",
+        m1nd: m1ndBridge.isConnected ? { structuralContextChars: structuralContext.length, grounded: structuralContext.length > 0 } : null,
+      });
     } catch (e: any) {
       console.error("[SSOT] Failed to generate proposal:", e.message);
       res.status(500).json({ error: e.message || "Failed to generate proposal" });
@@ -217,8 +290,9 @@ Keep it under 3 sentences. Be direct, authoritative, and analytical. Do not use 
 You are given the current system graph, a user prompt, and a proposal that was agreed upon.
 Your task is to output the NEW updated graph structure in JSON format.
 The output MUST be a valid JSON object with 'nodes' and 'links' arrays.
-Nodes must have: id, label, group, description, data_contract, status, type.
+Nodes must have: id, label, group, description, data_contract, status, type, acceptance_criteria (string array of 2-5 testable conditions), priority (number, build order), error_handling (string array, optional).
 Links must have: source, target, label.
+Preserve existing acceptance_criteria and priority values for unchanged nodes. Generate new ones for added/modified nodes.
 CRITICAL: Return ONLY valid JSON.`
       },
       {
@@ -270,6 +344,273 @@ CRITICAL: You must return ONLY valid JSON.`
     }
   });
 
+  // ─── M1ND API Endpoints ──────────────────────────────────────────
+
+  app.get("/api/m1nd/health", async (req, res) => {
+    const m = getM1ndBridge();
+    if (!m.isConnected) {
+      return res.json({ connected: false, nodeCount: 0, edgeCount: 0, graphState: 'offline' });
+    }
+    const health = await m.health();
+    res.json(health || { connected: false, nodeCount: 0, edgeCount: 0, graphState: 'error' });
+  });
+
+  app.post("/api/m1nd/activate", async (req, res) => {
+    const { query, agent_id, top_k } = req.body;
+    if (!query) return res.status(400).json({ error: "Missing 'query'" });
+    const result = await getM1ndBridge().activate(query, top_k || 20);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/impact", async (req, res) => {
+    const { node_id, direction } = req.body;
+    if (!node_id) return res.status(400).json({ error: "Missing 'node_id'" });
+    const result = await getM1ndBridge().impact(node_id, direction || 'forward');
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/predict", async (req, res) => {
+    const { changed_node, top_k } = req.body;
+    if (!changed_node) return res.status(400).json({ error: "Missing 'changed_node'" });
+    const result = await getM1ndBridge().predict(changed_node, top_k || 10);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/hypothesize", async (req, res) => {
+    const { claim } = req.body;
+    if (!claim) return res.status(400).json({ error: "Missing 'claim'" });
+    const result = await getM1ndBridge().hypothesize(claim);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/validate-plan", async (req, res) => {
+    const { actions } = req.body;
+    if (!actions || !Array.isArray(actions)) return res.status(400).json({ error: "Missing 'actions' array" });
+    const result = await getM1ndBridge().validatePlan(actions);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/panoramic", async (req, res) => {
+    const { top_n } = req.body;
+    const result = await getM1ndBridge().panoramic(top_n || 30);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/diagram", async (req, res) => {
+    const { center, depth, format } = req.body;
+    const result = await getM1ndBridge().diagram(center, depth || 2, format || 'mermaid');
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/layers", async (req, res) => {
+    const result = await getM1ndBridge().layers();
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/metrics", async (req, res) => {
+    const { scope, top_k } = req.body;
+    const result = await getM1ndBridge().metrics(scope, top_k || 30);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/ingest", async (req, res) => {
+    const { path: codePath, adapter, mode } = req.body;
+    if (!codePath) return res.status(400).json({ error: "Missing 'path'" });
+    const result = await getM1ndBridge().ingest(codePath, adapter || 'code', mode || 'replace');
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/document/resolve", async (req, res) => {
+    const { path: docPath, node_id } = req.body;
+    const result = await getM1ndBridge().documentResolve(docPath, node_id);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/document/bindings", async (req, res) => {
+    const { path: docPath, node_id, top_k } = req.body;
+    const result = await getM1ndBridge().documentBindings(docPath, node_id, top_k || 10);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  app.post("/api/m1nd/document/drift", async (req, res) => {
+    const { path: docPath, node_id } = req.body;
+    const result = await getM1ndBridge().documentDrift(docPath, node_id);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  // ─── OMX Export Endpoint ─────────────────────────────────────────────
+
+  app.post("/api/export/omx", (req, res) => {
+    const { graph, manifesto, architecture } = req.body;
+
+    if (!graph || !graph.nodes) {
+      return res.status(400).json({ error: "Missing 'graph' field." });
+    }
+
+    try {
+      // Topological sort: compute priority from links if not already set
+      const nodes = [...graph.nodes];
+      const links = graph.links || [];
+
+      // Build adjacency: who depends on whom
+      const inDegree = new Map<string, number>();
+      const dependents = new Map<string, string[]>();
+      for (const n of nodes) {
+        inDegree.set(n.id, 0);
+        dependents.set(n.id, []);
+      }
+      for (const l of links) {
+        inDegree.set(l.target, (inDegree.get(l.target) || 0) + 1);
+        if (!dependents.has(l.source)) dependents.set(l.source, []);
+        dependents.get(l.source)!.push(l.target);
+      }
+
+      // Kahn's algorithm for topological sort
+      const queue: string[] = [];
+      const order = new Map<string, number>();
+      for (const [id, deg] of inDegree) {
+        if (deg === 0) queue.push(id);
+      }
+
+      let level = 1;
+      while (queue.length > 0) {
+        const batch = [...queue];
+        queue.length = 0;
+        for (const id of batch) {
+          order.set(id, level);
+          for (const dep of (dependents.get(id) || [])) {
+            const newDeg = (inDegree.get(dep) || 1) - 1;
+            inDegree.set(dep, newDeg);
+            if (newDeg === 0) queue.push(dep);
+          }
+        }
+        level++;
+      }
+
+      // Assign computed priority
+      for (const n of nodes) {
+        if (!n.priority) {
+          n.priority = order.get(n.id) || 1;
+        }
+      }
+
+      // Group by priority phase
+      const phases = new Map<number, typeof nodes>();
+      for (const n of nodes) {
+        const p = n.priority || 1;
+        if (!phases.has(p)) phases.set(p, []);
+        phases.get(p)!.push(n);
+      }
+
+      // Generate .omx/plan.md
+      const planLines: string[] = [
+        `# OMX Execution Plan`,
+        ``,
+        `> Auto-generated from RETROBUILDER blueprint`,
+        `> Manifesto: ${(manifesto || 'Not specified').substring(0, 200)}`,
+        ``,
+      ];
+
+      const sortedPhases = [...phases.keys()].sort((a, b) => a - b);
+      const phaseNames = ['', 'Foundation', 'Core Services', 'Integration', 'Interface', 'Polish', 'Optimization'];
+
+      for (const p of sortedPhases) {
+        const phaseName = phaseNames[Math.min(p, phaseNames.length - 1)] || `Phase ${p}`;
+        planLines.push(`## Phase ${p}: ${phaseName} (priority ${p})`);
+        planLines.push('');
+
+        for (const n of phases.get(p)!) {
+          planLines.push(`### ${n.label}`);
+          planLines.push(`- **Type:** ${n.type}`);
+          planLines.push(`- **Description:** ${n.description}`);
+          if (n.data_contract) {
+            planLines.push(`- **Data Contract:** ${n.data_contract}`);
+          }
+          if (n.decision_rationale) {
+            planLines.push(`- **Rationale:** ${n.decision_rationale}`);
+          }
+
+          // Dependencies
+          const deps = links.filter((l: any) => l.target === n.id).map((l: any) => {
+            const src = nodes.find((nn: any) => nn.id === l.source);
+            return src ? src.label : l.source;
+          });
+          if (deps.length > 0) {
+            planLines.push(`- **Depends on:** ${deps.join(', ')}`);
+          }
+
+          // Acceptance criteria — the key for Ralph
+          if (n.acceptance_criteria && n.acceptance_criteria.length > 0) {
+            planLines.push(`- **Acceptance Criteria:**`);
+            for (const ac of n.acceptance_criteria) {
+              planLines.push(`  - [ ] ${ac}`);
+            }
+          }
+
+          // Error handling
+          if (n.error_handling && n.error_handling.length > 0) {
+            planLines.push(`- **Error Handling:**`);
+            for (const eh of n.error_handling) {
+              planLines.push(`  - ${eh}`);
+            }
+          }
+
+          planLines.push('');
+        }
+      }
+
+      // Generate AGENTS.md
+      const agentsLines: string[] = [
+        `# AGENTS.md`,
+        ``,
+        `> Auto-generated from RETROBUILDER blueprint`,
+        ``,
+        `## Project Overview`,
+        manifesto || 'No manifesto provided.',
+        ``,
+        `## Architecture`,
+        architecture || 'No architecture specified.',
+        ``,
+        `## Build Order`,
+        `Execute modules in priority order. Lower numbers are built first.`,
+        `Do NOT start a higher-priority module until all its dependencies are verified.`,
+        ``,
+        `## Verification Rules`,
+        `- Each module has explicit acceptance criteria`,
+        `- A module is COMPLETE only when ALL acceptance criteria pass`,
+        `- Run tests after each module completion`,
+        `- If a criterion fails, fix and re-verify before proceeding`,
+        ``,
+        `## Module Summary`,
+      ];
+
+      for (const n of nodes.sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0))) {
+        agentsLines.push(`- **${n.label}** (P${n.priority || '?'}, ${n.type}): ${n.description.substring(0, 100)}`);
+      }
+
+      const plan = planLines.join('\n');
+      const agents = agentsLines.join('\n');
+
+      res.json({
+        plan,
+        agents,
+        stats: {
+          totalNodes: nodes.length,
+          totalPhases: sortedPhases.length,
+          totalAcceptanceCriteria: nodes.reduce((sum: number, n: any) => sum + (n.acceptance_criteria?.length || 0), 0),
+          buildOrder: nodes
+            .sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0))
+            .map((n: any) => ({ id: n.id, label: n.label, priority: n.priority })),
+        },
+      });
+    } catch (e: any) {
+      console.error("[SSOT] Failed to export OMX plan:", e.message);
+      res.status(500).json({ error: e.message || "Failed to export OMX plan" });
+    }
+  });
+
+  // ─── Deep Research (enriched with m1nd) ──────────────────────────
+
   app.post("/api/ai/performDeepResearch", async (req, res) => {
     const { node, projectContext, model } = req.body;
 
@@ -277,28 +618,105 @@ CRITICAL: You must return ONLY valid JSON.`
       return res.status(400).json({ error: "Missing or invalid 'node' field." });
     }
 
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `You are an advanced AI research assistant for the 'm1nd' system.
-Your task is to perform deep research and grounding for a specific system module.
-You must synthesize information regarding:
-1. Emerging technological trends (5-year forecast).
-2. Promising GitHub repositories or open-source donors.
-3. Scientific articles or technical documentation.
-4. Suggestions to improve the design or implementation of this module.
-
-Format your response in clean Markdown.`
-      },
-      {
-        role: 'user',
-        content: `Project Context: ${projectContext}\n\nModule to Research:\nName: ${node.label}\nDescription: ${node.description}\nData Contract: ${node.data_contract || 'None'}\n\nPlease provide a deep research report for this module.`
-      }
-    ];
+    const researchQuery = `${node.label}: ${node.description || ''} ${node.data_contract ? 'Data contract: ' + node.data_contract : ''} best practices, architecture patterns, implementation`;
 
     try {
+      // Phase 1: Parallel web research across 6 sources
+      console.log(`[SSOT] 🔬 Deep Research: "${node.label}" — querying 6 sources...`);
+      const webResearch = await performWebResearch(researchQuery, {
+        perplexityKey: process.env.PERPLEXITY_API_KEY,
+        serperKey: process.env.SERPER_API_KEY,
+        readTopUrls: 2,
+        includeScholar: true,
+      });
+
+      const researchContext = buildResearchContext(webResearch);
+      console.log(`[SSOT] 📚 Research context: ${researchContext.length} chars, ${webResearch.totalSourcesFound} sources`);
+
+      // Phase 1.5: Enrich with m1nd document bindings (non-blocking)
+      let structuralBindings = '';
+      const m1ndBridge = getM1ndBridge();
+      if (m1ndBridge.isConnected) {
+        try {
+          const [bindings, drift] = await Promise.allSettled([
+            m1ndBridge.documentBindings(undefined, node.label),
+            m1ndBridge.documentDrift(undefined, node.label),
+          ]);
+
+          const bindingData = bindings.status === 'fulfilled' ? bindings.value : null;
+          const driftData = drift.status === 'fulfilled' ? drift.value : null;
+
+          if (bindingData || driftData) {
+            const parts: string[] = ['\n# Structural Bindings (m1nd Graph Engine)'];
+            if (bindingData?.bindings?.length > 0) {
+              parts.push(`This concept is bound to ${bindingData.bindings.length} code locations:`);
+              for (const b of bindingData.bindings.slice(0, 5)) {
+                parts.push(`- ${b.source_path || b.file_path || b.node_id} (confidence: ${b.score || b.confidence || 'n/a'})`);
+              }
+            }
+            if (driftData?.findings?.length > 0) {
+              parts.push(`\n⚠ Document drift detected: ${driftData.findings.length} stale bindings`);
+              for (const f of driftData.findings.slice(0, 3)) {
+                parts.push(`- ${f.message || f.description || JSON.stringify(f)}`);
+              }
+            }
+            structuralBindings = parts.join('\n');
+            console.log(`[SSOT] 🧠 Structural bindings: ${structuralBindings.length} chars`);
+          }
+        } catch (e: any) {
+          console.warn(`[SSOT] m1nd bindings failed (degrading): ${e.message}`);
+        }
+      }
+
+      // Phase 2: Send enriched context to the active LLM for synthesis
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: `You are an advanced AI research assistant for the 'm1nd' architectural system.
+You will receive REAL web research data (papers, articles, source excerpts) gathered from Perplexity, Google Scholar, Semantic Scholar, CrossRef, and live web pages.
+You may also receive STRUCTURAL BINDINGS from the m1nd graph engine showing where this concept is implemented in the codebase.
+
+Your task is to synthesize this research into a comprehensive report covering:
+1. **Current State of the Art** — what the latest research and industry practices say.
+2. **Academic Foundations** — relevant papers and their key findings.
+3. **Open Source Landscape** — promising repositories, frameworks, and tools.
+4. **Structural Grounding** — if m1nd bindings are available, show how this concept maps to the actual codebase.
+5. **Implementation Recommendations** — concrete, actionable suggestions.
+6. **Risk Analysis** — potential pitfalls and how to mitigate them.
+7. **5-Year Forecast** — where this technology is heading.
+
+CITATION RULES:
+- Reference specific papers by title and year when available.
+- Include URLs for web sources.
+- Distinguish between established consensus and emerging ideas.
+
+Format your response in clean Markdown with clear sections.`
+        },
+        {
+          role: 'user',
+          content: `Project Context: ${projectContext}\n\nModule to Research:\nName: ${node.label}\nDescription: ${node.description}\nData Contract: ${node.data_contract || 'None'}\n\n---\n\n# Real-Time Research Data\n\n${researchContext}${structuralBindings}\n\n---\n\nPlease synthesize the above research data into a comprehensive deep research report for this module.`
+        }
+      ];
+
       const result = await provider.chatCompletion(messages, { model });
-      res.json({ research: result || "Research failed." });
+
+      res.json({
+        research: result || 'Research failed.',
+        meta: {
+          sourcesFound: webResearch.totalSourcesFound,
+          searchTimeMs: webResearch.searchTimeMs,
+          sourcesBreakdown: {
+            perplexity: webResearch.perplexityAnswer ? 1 : 0,
+            webArticles: webResearch.sources.filter(s => s.source === 'serper').length,
+            scholarPapers: webResearch.sources.filter(s => s.source === 'scholar').length,
+            semanticScholar: webResearch.sources.filter(s => s.source === 'semantic_scholar').length,
+            crossref: webResearch.sources.filter(s => s.source === 'crossref').length,
+            githubDonors: webResearch.githubDonors.length,
+          },
+          enrichedPages: webResearch.enrichedContent.length,
+          m1nd: m1ndBridge.isConnected ? { structuralBindingsChars: structuralBindings.length, grounded: structuralBindings.length > 0 } : null,
+        },
+      });
     } catch (e: any) {
       console.error("[SSOT] Failed to perform deep research:", e.message);
       res.status(500).json({ error: e.message || "Failed to perform deep research" });
@@ -320,14 +738,43 @@ Format your response in clean Markdown.`
     });
   }
 
+  // ─── Initialize M1ND Bridge (non-blocking) ─────────────────────
+  const m1ndBridge = await initM1ndBridge();
+
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`\n╔══════════════════════════════════════════════╗`);
-    console.log(`║    M1ND // RETROBUILDER                      ║`);
-    console.log(`║    Server: http://localhost:${PORT}              ║`);
-    console.log(`║    Provider: ${provider.label.padEnd(32)}║`);
-    console.log(`║    Model: ${provider.defaultModel.padEnd(35)}║`);
-    console.log(`║    Rate Limit: 20 req/min per IP             ║`);
-    console.log(`╚══════════════════════════════════════════════╝\n`);
+    const R = '\x1b[0m';
+    const B = '\x1b[1m';
+    const D = '\x1b[2m';
+    const BORDER = '\x1b[38;2;92;118;255m';
+    const TITLE  = '\x1b[38;2;120;255;214m';
+    const LABEL  = '\x1b[38;2;255;184;108m';
+    const VALUE  = '\x1b[38;2;230;236;255m';
+    const ACCENT = '\x1b[38;2;255;94;125m';
+    const OK     = '\x1b[38;2;80;250;123m';
+    const WARN   = '\x1b[38;2;255;203;107m';
+
+    const pad = (s: string, n: number) => s + ' '.repeat(Math.max(0, n - s.length));
+
+    console.log('');
+    console.log(`${BORDER}╭──────────────────────────────────────────────────────────────╮${R}`);
+    console.log(`${BORDER}│${R} ${ACCENT}◉${R} ${B}${TITLE}M1ND${R} ${D}${VALUE}//${R} ${B}${TITLE}RETROBUILDER${R} ${D}${VALUE}· cognition layer online${R}        ${BORDER}│${R}`);
+    console.log(`${BORDER}├──────────────────────────────────────────────────────────────┤${R}`);
+    console.log(`${BORDER}│${R} ${LABEL}◈ Server${R}     ${VALUE}http://localhost:${PORT}${R}${' '.repeat(Math.max(0, 31 - String(PORT).length))}${BORDER}│${R}`);
+    console.log(`${BORDER}│${R} ${LABEL}◆ Provider${R}   ${VALUE}${pad(provider.label, 42)}${R}${BORDER}│${R}`);
+    console.log(`${BORDER}│${R} ${LABEL}⬢ Model${R}      ${VALUE}${pad(provider.defaultModel, 42)}${R}${BORDER}│${R}`);
+    console.log(`${BORDER}│${R} ${LABEL}⟳ Rate${R}       ${WARN}${pad('20 req/min per IP', 42)}${R}${BORDER}│${R}`);
+    console.log(`${BORDER}├──────────────────────────────────────────────────────────────┤${R}`);
+    const pplx = process.env.PERPLEXITY_API_KEY ? `${OK}●` : `${WARN}○`;
+    const srp = process.env.SERPER_API_KEY ? `${OK}●` : `${WARN}○`;
+    const jina = `${OK}●`; // always free
+    const m1ndStatus = m1ndBridge.isConnected ? `${OK}●` : `${WARN}○`;
+    const researchStatus = `${pplx} Perplexity ${srp} Serper ${jina} Jina+Scholar${R}`;
+    console.log(`${BORDER}│${R} ${LABEL}⚡ Research${R}  ${researchStatus}${' '.repeat(5)}${BORDER}│${R}`);
+    console.log(`${BORDER}│${R} ${LABEL}🧠 M1ND${R}      ${m1ndStatus} ${VALUE}${pad(m1ndBridge.isConnected ? 'graph engine · structural awareness' : 'offline · degraded mode', 40)}${R}${BORDER}│${R}`);
+    console.log(`${BORDER}├──────────────────────────────────────────────────────────────┤${R}`);
+    console.log(`${BORDER}│${R} ${OK}████${R}${TITLE}██${R} ${D}${VALUE}neural ingress · memory graph · semantic reconstruction${R} ${BORDER}│${R}`);
+    console.log(`${BORDER}╰──────────────────────────────────────────────────────────────╯${R}`);
+    console.log('');
   });
 }
 
