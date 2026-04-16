@@ -13,7 +13,7 @@ import {
   SessionDocument,
 } from '../lib/api';
 
-export type AppMode = 'architect' | 'm1nd';
+export type AppMode = 'architect' | 'm1nd' | 'builder';
 export type SessionSaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 interface GraphState {

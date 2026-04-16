@@ -29,6 +29,7 @@ import {
 } from "./src/server/session-analysis.js";
 import { importCodebaseToSession } from "./src/server/codebase-import.js";
 import { readEnvConfigState, writeEnvConfig } from "./src/server/env-config.js";
+import { runOMXSimulation } from "./src/server/omx-runner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -325,7 +326,48 @@ async function startServer() {
     });
   });
 
-  // ─── Session API ────────────────────────────────────────────────────
+  // ─── Session API ────────────────────────────────────────────────
+
+  // ─── OMX Build Stream (SSE) ────────────────────────────────────
+
+  app.get("/api/omx/stream/:sessionId", async (req, res) => {
+    const { sessionId } = req.params;
+
+    let session;
+    try {
+      session = await loadSession(sessionId);
+    } catch {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // Keep alive ping every 15s
+    const keepAlive = setInterval(() => {
+      if (!res.writableEnded) res.write(':ping\n\n');
+    }, 15000);
+
+    req.on('close', () => clearInterval(keepAlive));
+
+    try {
+      await runOMXSimulation(session.graph as any, res, req);
+    } catch (err) {
+      console.error('[OMX] Simulation error:', err);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ type: 'node_error', nodeId: 'system', error: String(err), retrying: false })}\n\n`);
+        res.end();
+      }
+    } finally {
+      clearInterval(keepAlive);
+    }
+  });
+
 
   app.get("/api/sessions", async (req, res) => {
     const sessions = await listSessions();

@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import GraphView from './components/GraphView';
+import BuildView from './components/BuildView';
 import Sidebar from './components/Sidebar';
 import Checklist from './components/Checklist';
 import ChatFooter from './components/ChatFooter';
@@ -216,6 +217,11 @@ export default function App() {
         e.preventDefault();
         setAppMode('m1nd');
       }
+      // ⌘+3 — Builder mode
+      if ((e.metaKey || e.ctrlKey) && e.key === '3') {
+        e.preventDefault();
+        setAppMode('builder');
+      }
       // ⌘+S — save active session
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
@@ -227,6 +233,7 @@ export default function App() {
   }, [setAppMode, handleManualSave]);
 
   const isM1nd = appMode === 'm1nd';
+  const isBuilder = appMode === 'builder';
 
   return (
     <ErrorBoundary fallbackMessage="RETROBUILDER encountered a critical error. Click Recover to reset the view.">
@@ -375,9 +382,9 @@ export default function App() {
               </button>
             </div>
 
-            <div className="absolute inset-0 grid-pulse pointer-events-none" />
+            {!isBuilder && <div className="absolute inset-0 grid-pulse pointer-events-none" />}
             <ErrorBoundary fallbackMessage="Graph rendering failed. This may be caused by malformed AI output.">
-              <GraphView />
+              {isBuilder ? <BuildView /> : <GraphView />}
             </ErrorBoundary>
           </div>
 

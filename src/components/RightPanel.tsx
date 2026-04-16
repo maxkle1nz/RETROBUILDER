@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
+import { useBuildStore } from '../store/useBuildStore';
 import {
   activateSessionDraft,
   ExportBlockedError,
@@ -205,6 +206,8 @@ export default function RightPanel() {
     setExporting(true);
     try {
       const result = await exportSessionDraftToOmx(activeSessionId, currentDraft);
+
+      // Download the OMX plan file
       const blob = new Blob(
         [`${result.plan}\n\n---\n\n${result.agents}`],
         { type: 'text/markdown' },
@@ -216,7 +219,15 @@ export default function RightPanel() {
       a.click();
       URL.revokeObjectURL(url);
       setReadiness(result.readiness);
-      toast.success('OMX plan exported');
+
+      // ─── Activate Build Mode ───
+      const nodeIds = graphData.nodes.map((n) => n.id);
+      useBuildStore.getState().resetBuild();
+      useBuildStore.getState().initNodeStates(nodeIds);
+      useBuildStore.getState().startBuild();
+      useGraphStore.getState().setAppMode('builder');
+
+      toast.success('OMX plan exported — Build Mode activated');
     } catch (error) {
       if (error instanceof ExportBlockedError) {
         setReadiness(error.readiness || null);
