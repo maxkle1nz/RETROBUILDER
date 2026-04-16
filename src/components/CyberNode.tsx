@@ -1,10 +1,12 @@
 import React from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
-import { NodeData } from '../lib/api';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
+import type { NodeData } from '../lib/api';
 import { useGraphStore } from '../store/useGraphStore';
 import { CheckCircle2, Circle, PlayCircle, Database, Layout, Server, Shield, Globe } from 'lucide-react';
 
-export default function CyberNode({ data, selected }: NodeProps<NodeData>) {
+type CyberNodeData = { data: NodeData; selected?: boolean };
+
+export default function CyberNode({ data, selected }: CyberNodeData) {
   const highlightedNodes = useGraphStore((s) => s.highlightedNodes);
   const highlightSource = useGraphStore((s) => s.highlightSource);
   
@@ -87,6 +89,11 @@ export default function CyberNode({ data, selected }: NodeProps<NodeData>) {
           </span>
         </div>
         <div className="flex items-center gap-1.5">
+          {data.priority && (
+            <span className="text-[8px] font-mono bg-[rgba(255,255,255,0.08)] px-1.5 py-0.5 rounded text-text-dim">
+              P{data.priority}
+            </span>
+          )}
           {isCompleted && <CheckCircle2 size={12} style={{ color: typeColor }} />}
           {isInProgress && <PlayCircle size={12} className="text-text-dim" />}
           {!isCompleted && !isInProgress && <Circle size={12} className="text-text-dim" />}
@@ -108,6 +115,16 @@ export default function CyberNode({ data, selected }: NodeProps<NodeData>) {
           <div className="text-[9px] text-accent-dim font-mono truncate">
             {data.data_contract}
           </div>
+        </div>
+      )}
+
+      {/* Acceptance Criteria Badge */}
+      {data.acceptance_criteria && data.acceptance_criteria.length > 0 && (
+        <div className="px-3 py-1.5 border-t border-border-subtle bg-[rgba(80,250,123,0.04)] flex items-center justify-between">
+          <span className="text-[8px] uppercase text-[#50fa7b]/70 tracking-widest">AC</span>
+          <span className="text-[9px] font-mono text-[#50fa7b]">
+            {data.acceptance_criteria.length} criteria
+          </span>
         </div>
       )}
 

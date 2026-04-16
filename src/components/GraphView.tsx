@@ -64,12 +64,12 @@ function Flow() {
       return;
     }
 
-    const initialNodes: Node[] = graphData.nodes.map((n) => ({
+    const initialNodes = graphData.nodes.map((n) => ({
       id: n.id,
       type: 'cyber',
       position: { x: 0, y: 0 },
       data: n,
-    }));
+    })) as unknown as Node[];
 
     const initialEdges: Edge[] = graphData.links.map((l, idx) => ({
       id: `e-${l.source}-${l.target}-${idx}`,

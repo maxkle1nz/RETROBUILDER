@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
 import { generateGraphStructure, generateProposal, applyProposal } from '../lib/api';
 import { m1nd } from '../lib/m1nd';
-import { Send, Loader2, Terminal, Check, X, BrainCircuit, Download, Upload, Trash2 } from 'lucide-react';
+import { Send, Loader2, Terminal, Check, X, BrainCircuit, Download, Upload, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import ModelSelector from './ModelSelector';
 
@@ -16,13 +16,24 @@ interface ChatMessage {
 export default function ChatFooter() {
   const { graphData, setGraphData, setManifesto, setArchitecture, manifesto, isGenerating, setIsGenerating, projectContext, setProjectContext, pendingProposal, setPendingProposal, appMode } = useGraphStore();
   const [prompt, setPrompt] = useState('');
-  const [m1ndConnected, setM1ndConnected] = useState(false);
+  const [m1ndOnline, setM1ndOnline] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
 
   const isM1ndMode = appMode === 'm1nd';
   const mode = isM1ndMode ? 'M1ND' : (graphData.nodes.length === 0 ? 'KONSTRUKTOR' : 'KREATOR');
+
+  // Check m1nd health
+  useEffect(() => {
+    const check = async () => {
+      const online = await m1nd.isConnected();
+      setM1ndOnline(online);
+    };
+    check();
+    const interval = setInterval(check, 20000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-scroll history
   useEffect(() => {
@@ -42,23 +53,23 @@ export default function ChatFooter() {
     addMessage('user', currentPrompt);
     setShowHistory(true);
 
-    // ─── M1ND Mode: route through m1nd.activate ───
+    // ─── M1ND Mode: route through server-side m1nd bridge ───
     if (isM1ndMode) {
       setIsGenerating(true);
       try {
-        if (!m1ndConnected) {
-          await m1nd.connect();
-          setM1ndConnected(true);
-          toast.success('Connected to m1nd MCP proxy');
+        const result = await m1nd.activate(currentPrompt);
+        if (result?.error) {
+          addMessage('system', `m1nd: ${result.error}`);
+          toast.warning('m1nd offline — structural queries unavailable');
+        } else {
+          const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+          addMessage('m1nd', text);
         }
-        const result = await m1nd.activate('retrobuilder', currentPrompt);
-        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-        addMessage('m1nd', text);
       } catch (error) {
         console.error("[m1nd] Activation error:", error);
-        const msg = error instanceof Error ? error.message : 'Failed to connect to m1nd proxy';
+        const msg = error instanceof Error ? error.message : 'Failed to query m1nd';
         addMessage('system', `Error: ${msg}`);
-        toast.error('m1nd activation failed', { description: msg });
+        toast.error('m1nd query failed', { description: msg });
       } finally {
         setIsGenerating(false);
       }
@@ -98,7 +109,7 @@ export default function ChatFooter() {
     setIsGenerating(true);
     try {
       const newGraph = await applyProposal(pendingProposal.prompt, graphData, manifesto, pendingProposal.text);
-      if (newGraph?.nodes?.links !== undefined || (newGraph?.nodes && newGraph?.links)) {
+      if (newGraph?.nodes && newGraph?.links) {
         setGraphData(newGraph);
         addMessage('system', `✓ Applied modification: ${newGraph.nodes.length} nodes`);
         toast.success('Proposal applied successfully');
@@ -233,6 +244,11 @@ export default function ChatFooter() {
             <div className={`flex items-center gap-2 ${isM1ndMode ? 'text-[#b026ff]' : 'text-accent'}`}>
               {isM1ndMode ? <BrainCircuit size={12} /> : <Terminal size={12} />}
               <span>[ {mode} MODE ]</span>
+              {m1ndOnline && isM1ndMode && (
+                <span className="flex items-center gap-1 text-[#50fa7b] text-[8px]">
+                  <Zap size={8} /> GROUNDED
+                </span>
+              )}
               {messages.length > 0 && (
                 <button 
                   onClick={() => setShowHistory(!showHistory)} 
