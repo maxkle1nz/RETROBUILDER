@@ -8,13 +8,13 @@ import GraphView from './components/GraphView';
 import Sidebar from './components/Sidebar';
 import Checklist from './components/Checklist';
 import ChatFooter from './components/ChatFooter';
-import ProposalModal from './components/ProposalModal';
 import RightPanel from './components/RightPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import SessionLauncher from './components/SessionLauncher';
+import EnvConfigModal from './components/EnvConfigModal';
 import { useGraphStore } from './store/useGraphStore';
-import { listSessions, loadSession, registerModelGetter, saveSession } from './lib/api';
-import { BrainCircuit, FolderOpen, PenTool, PanelRightClose, PanelLeftClose, Save } from 'lucide-react';
+import { fetchEnvConfig, listSessions, loadSession, registerModelGetter, saveSession } from './lib/api';
+import { BrainCircuit, FolderOpen, KeyRound, PenTool, PanelRightClose, PanelLeftClose, Save } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Toaster, toast } from 'sonner';
 
@@ -44,10 +44,12 @@ export default function App() {
     manifesto,
     architecture,
     projectContext,
+    setActiveProvider,
     setAvailableSessions,
     hydrateSession,
     openSessionLauncher,
     closeSessionLauncher,
+    openEnvConfigModal,
     setSessionSaveState,
   } = useGraphStore();
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -111,6 +113,29 @@ export default function App() {
     bootstrapSessions();
     return () => { cancelled = true; };
   }, [refreshSessions, hydrateSession, closeSessionLauncher, openSessionLauncher]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrapEnvOnboarding() {
+      try {
+        const envState = await fetchEnvConfig();
+        if (cancelled) return;
+        useGraphStore.getState().setAvailableProviders(envState.providers);
+        if (envState.config.AI_PROVIDER) {
+          setActiveProvider(envState.config.AI_PROVIDER);
+        }
+        if (envState.onboardingRequired) {
+          openEnvConfigModal();
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    bootstrapEnvOnboarding();
+    return () => { cancelled = true; };
+  }, [openEnvConfigModal, setActiveProvider]);
 
   useEffect(() => {
     if (!activeSessionId || sessionSaveState !== 'dirty') return;
@@ -252,6 +277,17 @@ export default function App() {
                 </span>
               )}
             </button>
+
+            <button
+              onClick={() => openEnvConfigModal()}
+              className="flex items-center gap-2 px-3 py-1.5 rounded border border-border-subtle bg-black/40 text-text-dim hover:text-white hover:border-accent transition-colors"
+            >
+              <KeyRound size={14} />
+              <div className="text-left">
+                <div className="text-[9px] uppercase tracking-[0.25em]">Keys</div>
+                <div className="text-[11px] font-mono max-w-[180px] truncate">Project env</div>
+              </div>
+            </button>
             
             <div className="flex bg-black/50 rounded-md border border-border-subtle p-1">
               <button
@@ -365,8 +401,8 @@ export default function App() {
         </div>
         
         <ChatFooter />
-        <ProposalModal />
         <SessionLauncher />
+        <EnvConfigModal />
       </div>
     </ErrorBoundary>
   );

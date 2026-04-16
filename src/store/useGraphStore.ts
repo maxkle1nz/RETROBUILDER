@@ -23,6 +23,7 @@ interface GraphState {
   importMeta: CodebaseImportMeta | null;
   availableSessions: SessionSummary[];
   showSessionLauncher: boolean;
+  showEnvConfigModal: boolean;
   sessionSaveState: SessionSaveState;
   graphData: GraphData;
   manifesto: string;
@@ -71,6 +72,8 @@ interface GraphState {
   setSessionName: (name: string) => void;
   openSessionLauncher: () => void;
   closeSessionLauncher: () => void;
+  openEnvConfigModal: () => void;
+  closeEnvConfigModal: () => void;
   hydrateSession: (session: SessionDocument) => void;
   clearSession: () => void;
 }
@@ -85,6 +88,7 @@ export const useGraphStore = create<GraphState>()(
         importMeta: null,
         availableSessions: [],
         showSessionLauncher: true,
+        showEnvConfigModal: false,
         sessionSaveState: 'idle',
         graphData: { nodes: [], links: [] },
         manifesto: '',
@@ -178,6 +182,8 @@ export const useGraphStore = create<GraphState>()(
         })),
         openSessionLauncher: () => set({ showSessionLauncher: true }),
         closeSessionLauncher: () => set({ showSessionLauncher: false }),
+        openEnvConfigModal: () => set({ showEnvConfigModal: true }),
+        closeEnvConfigModal: () => set({ showEnvConfigModal: false }),
         hydrateSession: (session) => set({
           activeSessionId: session.id,
           activeSessionName: session.name,
@@ -229,6 +235,7 @@ export const useGraphStore = create<GraphState>()(
         activeModel: state.activeModel,
         activeSessionId: state.activeSessionId,
         showSessionLauncher: state.showSessionLauncher,
+        showEnvConfigModal: state.showEnvConfigModal,
       }),
     }
   )

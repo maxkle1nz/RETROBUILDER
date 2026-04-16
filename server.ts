@@ -3,6 +3,7 @@ dotenv.config({ path: '.env' });
 dotenv.config({ path: '.env.local', override: true });
 import express from "express";
 import rateLimit from "express-rate-limit";
+import { readFile } from 'node:fs/promises';
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -27,12 +28,25 @@ import {
   runSessionAdvancedAction,
 } from "./src/server/session-analysis.js";
 import { importCodebaseToSession } from "./src/server/codebase-import.js";
+import { readEnvConfigState, writeEnvConfig } from "./src/server/env-config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ─── SSOT Provider Initialization ────────────────────────────────────
 // Provider is now mutable — can be switched at runtime via API
 let provider: AIProvider = createProvider();
+
+type CompletionConfigLike = {
+  model?: string;
+  jsonMode?: boolean;
+  maxTokens?: number;
+  temperature?: number;
+};
+
+type ProviderProbe = {
+  status: 'ready' | 'offline' | 'blocked' | 'missing_config';
+  error?: string;
+};
 
 function extractJSON(text: string): string {
   // 1. Try the raw text as-is (works when json_object mode returns clean JSON)
@@ -127,6 +141,164 @@ async function resolveSessionPayload(
   return loadSession(sessionId);
 }
 
+function collectFileUris(prompt: string): string[] {
+  const matches = prompt.match(/file:\/\/[^\s]+/g) || [];
+  return [...new Set(matches)];
+}
+
+async function hydratePromptWithFiles(prompt: string): Promise<string> {
+  const uris = collectFileUris(prompt);
+  if (uris.length === 0) return prompt;
+
+  const sections: string[] = [];
+  for (const uri of uris.slice(0, 6)) {
+    try {
+      const url = new URL(uri);
+      const filePath = decodeURIComponent(url.pathname);
+      const content = await readFile(filePath, 'utf8');
+      sections.push(
+        [
+          `## FILE CONTEXT`,
+          `Source: ${filePath}`,
+          content.slice(0, 24000),
+        ].join('\n'),
+      );
+    } catch (error: any) {
+      sections.push(
+        [
+          `## FILE CONTEXT`,
+          `Source: ${uri}`,
+          `ERROR: failed to read file (${error.message || 'unknown error'})`,
+        ].join('\n'),
+      );
+    }
+  }
+
+  return `${prompt}\n\n--- ATTACHED FILE CONTENT ---\n\n${sections.join('\n\n---\n\n')}`;
+}
+
+function fallbackProviderOrder(activeProviderName: string): string[] {
+  const ordered = [activeProviderName, 'bridge', 'openai', 'xai'];
+  return [...new Set(ordered.filter(Boolean))];
+}
+
+async function chatCompletionWithFallback(
+  messages: ChatMessage[],
+  config: CompletionConfigLike,
+  purpose: string,
+): Promise<{ content: string; providerName: string; providerLabel: string; fallbackUsed: boolean }> {
+  const attempted: string[] = [];
+
+  for (const providerName of fallbackProviderOrder(provider.name)) {
+    let candidate: AIProvider;
+    try {
+      candidate = providerName === provider.name ? provider : createProvider(providerName);
+    } catch (error: any) {
+      attempted.push(`${providerName}: unavailable (${error.message})`);
+      continue;
+    }
+
+    try {
+      const content = await candidate.chatCompletion(messages, config);
+      return {
+        content,
+        providerName: candidate.name,
+        providerLabel: candidate.label,
+        fallbackUsed: candidate.name !== provider.name,
+      };
+    } catch (error: any) {
+      attempted.push(`${candidate.name}: ${error.message || 'request failed'}`);
+      console.warn(`[SSOT] ${purpose} failed on ${candidate.name}: ${error.message}`);
+    }
+  }
+
+  throw new Error(`[AI] ${purpose} failed across providers — ${attempted.join(' | ')}`);
+}
+
+async function probeProviderHealth(providerName: string): Promise<ProviderProbe> {
+  const timeout = AbortSignal.timeout(4000);
+
+  try {
+    switch (providerName) {
+      case 'xai': {
+        if (!process.env.XAI_API_KEY) {
+          return { status: 'missing_config', error: '[xAI] XAI_API_KEY environment variable is required.' };
+        }
+        const res = await fetch('https://api.x.ai/v1/models', {
+          headers: { Authorization: `Bearer ${process.env.XAI_API_KEY}` },
+          signal: timeout,
+        });
+        if (res.ok) return { status: 'ready' };
+        const body = await res.text();
+        return {
+          status: res.status === 403 ? 'blocked' : 'offline',
+          error: `[xAI] ${res.status} ${body}`.slice(0, 300),
+        };
+      }
+      case 'openai': {
+        if (!process.env.OPENAI_API_KEY) {
+          return { status: 'missing_config', error: '[OpenAI] OPENAI_API_KEY environment variable is required.' };
+        }
+        const res = await fetch('https://api.openai.com/v1/models', {
+          headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+          signal: timeout,
+        });
+        if (res.ok) return { status: 'ready' };
+        const body = await res.text();
+        return {
+          status: res.status === 403 ? 'blocked' : 'offline',
+          error: `[OpenAI] ${res.status} ${body}`.slice(0, 300),
+        };
+      }
+      case 'bridge': {
+        const baseUrl = (process.env.THEBRIDGE_URL || 'http://127.0.0.1:7788/v1').replace(/\/v1$/, '');
+        const res = await fetch(`${baseUrl}/health`, { signal: timeout });
+        if (res.ok) return { status: 'ready' };
+        const body = await res.text();
+        return { status: 'offline', error: `[BRIDGE] ${res.status} ${body}`.slice(0, 300) };
+      }
+      default:
+        return { status: 'offline', error: 'Unknown provider.' };
+    }
+  } catch (error: any) {
+    return {
+      status: providerName === 'bridge' ? 'offline' : 'blocked',
+      error: `[${providerName}] ${error.message || 'Probe failed'}`,
+    };
+  }
+}
+
+async function collectProviderStates() {
+  const names = getProviderNames();
+  const providers = [];
+
+  for (const name of names) {
+    const probe = await probeProviderHealth(name);
+    try {
+      const p = PROVIDER_FACTORIES[name]();
+      providers.push({
+        name: p.name,
+        label: p.label,
+        defaultModel: p.defaultModel,
+        active: p.name === provider.name,
+        status: probe.status,
+        error: probe.error,
+      });
+    } catch (e: any) {
+      providers.push({
+        name,
+        label: name,
+        defaultModel: null,
+        active: false,
+        status: probe.status,
+        error: probe.error || e.message,
+      });
+    }
+  }
+
+  return providers;
+}
+
 // ─── Rate Limiting ───────────────────────────────────────────────────
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,      // 1 minute window
@@ -186,7 +358,11 @@ async function startServer() {
     }
 
     try {
-      const result = await importCodebaseToSession(codebasePath, provider, model);
+      const result = await importCodebaseToSession(
+        codebasePath,
+        (messages, config) => chatCompletionWithFallback(messages, config || {}, 'importCodebaseToSession').then((out) => out.content),
+        model,
+      );
       res.status(201).json(result);
     } catch (e: any) {
       console.error("[sessions] Failed to import codebase:", e.message);
@@ -279,34 +455,48 @@ async function startServer() {
     res.json(result);
   });
 
+  // ─── Project Env Config ─────────────────────────────────────────────
+
+  app.get("/api/config/env", async (req, res) => {
+    const providers = await collectProviderStates();
+    const state = await readEnvConfigState(providers);
+    res.json(state);
+  });
+
+  app.put("/api/config/env", async (req, res) => {
+    const { updates } = req.body || {};
+    if (!updates || typeof updates !== 'object') {
+      return res.status(400).json({ error: "Missing 'updates' object." });
+    }
+
+    try {
+      const targetFile = await writeEnvConfig(updates);
+      const desiredProvider = process.env.AI_PROVIDER || provider.name;
+      try {
+        provider = createProvider(desiredProvider);
+        if (provider.warmModel) {
+          provider.warmModel().catch(() => {});
+        }
+      } catch (error) {
+        console.warn(`[SSOT] Provider re-init after env save failed: ${(error as Error).message}`);
+      }
+      const providers = await collectProviderStates();
+      const state = await readEnvConfigState(providers);
+      res.json({
+        success: true,
+        targetFile,
+        ...state,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to save env config." });
+    }
+  });
+
   // ─── Provider & Model Configuration ─────────────────────────────────
   
   /** List all available providers and their metadata */
   app.get("/api/ai/providers", async (req, res) => {
-    const names = getProviderNames();
-    const providers = [];
-    
-    for (const name of names) {
-      try {
-        const p = PROVIDER_FACTORIES[name]();
-        providers.push({
-          name: p.name,
-          label: p.label,
-          defaultModel: p.defaultModel,
-          active: p.name === provider.name,
-        });
-      } catch (e: any) {
-        // Provider can't be created (e.g., missing API key)
-        providers.push({
-          name,
-          label: name,
-          defaultModel: null,
-          active: false,
-          error: e.message,
-        });
-      }
-    }
-    
+    const providers = await collectProviderStates();
     res.json({ providers, active: provider.name });
   });
 
@@ -380,6 +570,8 @@ async function startServer() {
       return res.status(400).json({ error: "Missing or invalid 'prompt' field." });
     }
 
+    const hydratedPrompt = await hydratePromptWithFiles(prompt);
+
     const messages: ChatMessage[] = [
       {
         role: 'system',
@@ -413,14 +605,21 @@ CRITICAL: You must return ONLY valid JSON.`
       },
       {
         role: 'user',
-        content: `User Prompt: ${prompt}\n\nCurrent Manifesto: ${currentManifesto || 'None'}\nCurrent Graph: ${currentGraph ? JSON.stringify(currentGraph) : 'None'}`
+        content: `User Prompt: ${hydratedPrompt}\n\nCurrent Manifesto: ${currentManifesto || 'None'}\nCurrent Graph: ${currentGraph ? JSON.stringify(currentGraph) : 'None'}`
       }
     ];
 
     try {
-      const rawContent = await provider.chatCompletion(messages, { jsonMode: true, model });
+      const result = await chatCompletionWithFallback(messages, { jsonMode: true, model }, 'generateGraphStructure');
+      const rawContent = result.content;
       const validated = validateAIResponse(extractJSON(rawContent), SystemStateSchema, 'generateGraphStructure');
-      res.json(validated);
+      res.json({
+        ...validated,
+        meta: {
+          provider: result.providerName,
+          fallbackUsed: result.fallbackUsed,
+        },
+      });
     } catch (e: any) {
       console.error("[SSOT] Failed to generate graph structure:", e.message);
       res.status(500).json({ error: e.message || "Failed to generate graph structure" });
@@ -433,6 +632,8 @@ CRITICAL: You must return ONLY valid JSON.`
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: "Missing or invalid 'prompt' field." });
     }
+
+    const hydratedPrompt = await hydratePromptWithFiles(prompt);
 
     // ─── Phase 0: Gather m1nd structural context (non-blocking) ───
     const m1ndBridge = getM1ndBridge();
@@ -482,15 +683,19 @@ Keep it under 4 sentences. Be direct, authoritative, and analytical. Do not use 
       },
       {
         role: 'user',
-        content: `Manifesto: ${manifesto}\nCurrent Graph Nodes: ${currentGraph?.nodes?.length || 0}\nUser Prompt: ${prompt}${structuralContext}\n\nWhat is your modification plan?`
+        content: `Manifesto: ${manifesto}\nCurrent Graph Nodes: ${currentGraph?.nodes?.length || 0}\nUser Prompt: ${hydratedPrompt}${structuralContext}\n\nWhat is your modification plan?`
       }
     ];
 
     try {
-      const result = await provider.chatCompletion(messages, { model });
+      const result = await chatCompletionWithFallback(messages, { model }, 'generateProposal');
       res.json({
-        proposal: result || "Awaiting confirmation to modify system topology.",
+        proposal: result.content || "Awaiting confirmation to modify system topology.",
         m1nd: m1ndBridge.isConnected ? { structuralContextChars: structuralContext.length, grounded: structuralContext.length > 0 } : null,
+        meta: {
+          provider: result.providerName,
+          fallbackUsed: result.fallbackUsed,
+        },
       });
     } catch (e: any) {
       console.error("[SSOT] Failed to generate proposal:", e.message);
@@ -504,6 +709,8 @@ Keep it under 4 sentences. Be direct, authoritative, and analytical. Do not use 
     if (!prompt || !proposal) {
       return res.status(400).json({ error: "Missing 'prompt' or 'proposal' field." });
     }
+
+    const hydratedPrompt = await hydratePromptWithFiles(prompt);
 
     const messages: ChatMessage[] = [
       {
@@ -519,12 +726,13 @@ CRITICAL: Return ONLY valid JSON.`
       },
       {
         role: 'user',
-        content: `Current Graph: ${JSON.stringify(currentGraph)}\n\nUser Prompt: ${prompt}\n\nAgreed Proposal: ${proposal}\n\nGenerate the new graph JSON.`
+        content: `Current Graph: ${JSON.stringify(currentGraph)}\n\nUser Prompt: ${hydratedPrompt}\n\nAgreed Proposal: ${proposal}\n\nGenerate the new graph JSON.`
       }
     ];
 
     try {
-      const rawContent = await provider.chatCompletion(messages, { jsonMode: true, model });
+      const result = await chatCompletionWithFallback(messages, { jsonMode: true, model }, 'applyProposal');
+      const rawContent = result.content;
       const validated = validateAIResponse(extractJSON(rawContent), GraphDataSchema, 'applyProposal');
       res.json(validated);
     } catch (e: any) {
@@ -557,7 +765,8 @@ CRITICAL: You must return ONLY valid JSON.`
     ];
 
     try {
-      const rawContent = await provider.chatCompletion(messages, { jsonMode: true, model });
+      const result = await chatCompletionWithFallback(messages, { jsonMode: true, model }, 'analyzeArchitecture');
+      const rawContent = result.content;
       const validated = validateAIResponse(extractJSON(rawContent), AnalysisResultSchema, 'analyzeArchitecture');
       res.json(validated);
     } catch (e: any) {
@@ -936,10 +1145,10 @@ Format your response in clean Markdown with clear sections.`
         }
       ];
 
-      const result = await provider.chatCompletion(messages, { model });
+      const result = await chatCompletionWithFallback(messages, { model }, 'performDeepResearch');
 
       res.json({
-        research: result || 'Research failed.',
+        research: result.content || 'Research failed.',
         meta: {
           sourcesFound: webResearch.totalSourcesFound,
           searchTimeMs: webResearch.searchTimeMs,
@@ -953,6 +1162,8 @@ Format your response in clean Markdown with clear sections.`
           },
           enrichedPages: webResearch.enrichedContent.length,
           m1nd: m1ndBridge.isConnected ? { structuralBindingsChars: structuralBindings.length, grounded: structuralBindings.length > 0 } : null,
+          provider: result.providerName,
+          fallbackUsed: result.fallbackUsed,
         },
       });
     } catch (e: any) {

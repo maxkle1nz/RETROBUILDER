@@ -164,6 +164,7 @@ export interface ProviderInfo {
   label: string;
   defaultModel: string | null;
   active: boolean;
+  status?: 'ready' | 'offline' | 'blocked' | 'missing_config';
   error?: string;
 }
 
@@ -171,6 +172,14 @@ export interface ModelInfo {
   id: string;
   name: string;
   provider: string;
+}
+
+export interface EnvConfigState {
+  targetFile: string;
+  onboardingRequired: boolean;
+  config: Partial<Record<string, string>>;
+  configured: Partial<Record<string, boolean>>;
+  providers: ProviderInfo[];
 }
 
 export class ExportBlockedError extends Error {
@@ -207,6 +216,25 @@ export async function switchProvider(providerName: string): Promise<{ success: b
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || "Failed to switch provider");
+  }
+  return res.json();
+}
+
+export async function fetchEnvConfig(): Promise<EnvConfigState> {
+  const res = await fetch('/api/config/env');
+  if (!res.ok) throw new Error('Failed to fetch env config');
+  return res.json();
+}
+
+export async function saveEnvConfig(updates: Record<string, string>): Promise<EnvConfigState & { success: boolean; targetFile: string }> {
+  const res = await fetch('/api/config/env', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ updates }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to save env config');
   }
   return res.json();
 }
@@ -349,13 +377,18 @@ function activeModel(): string | undefined {
   return getActiveModel?.() || undefined;
 }
 
+async function throwApiError(res: Response, fallback: string): Promise<never> {
+  const data = await res.json().catch(() => ({}));
+  throw new Error(data.error || fallback);
+}
+
 export async function generateGraphStructure(prompt: string, currentGraph?: GraphData, currentManifesto?: string): Promise<SystemState> {
   const res = await fetch("/api/ai/generateGraphStructure", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt, currentGraph, currentManifesto, model: activeModel() })
   });
-  if (!res.ok) throw new Error("Failed to generate graph structure");
+  if (!res.ok) await throwApiError(res, "Failed to generate graph structure");
   return res.json();
 }
 
@@ -365,7 +398,7 @@ export async function generateProposal(prompt: string, currentGraph: GraphData, 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt, currentGraph, manifesto, model: activeModel() })
   });
-  if (!res.ok) throw new Error("Failed to generate proposal");
+  if (!res.ok) await throwApiError(res, "Failed to generate proposal");
   const data = await res.json();
   return data.proposal;
 }
@@ -376,7 +409,7 @@ export async function applyProposal(prompt: string, currentGraph: GraphData, man
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt, currentGraph, manifesto, proposal, model: activeModel() })
   });
-  if (!res.ok) throw new Error("Failed to apply proposal");
+  if (!res.ok) await throwApiError(res, "Failed to apply proposal");
   return res.json();
 }
 
@@ -386,7 +419,7 @@ export async function analyzeArchitecture(graph: GraphData, manifesto: string): 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ graph, manifesto, model: activeModel() })
   });
-  if (!res.ok) throw new Error("Failed to analyze architecture");
+  if (!res.ok) await throwApiError(res, "Failed to analyze architecture");
   return res.json();
 }
 
@@ -396,7 +429,7 @@ export async function performDeepResearch(node: NodeData, projectContext: string
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ node, projectContext, model: activeModel() })
   });
-  if (!res.ok) throw new Error("Failed to perform deep research");
+  if (!res.ok) await throwApiError(res, "Failed to perform deep research");
   const data = await res.json();
   return data.research;
 }
