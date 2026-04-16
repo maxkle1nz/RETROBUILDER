@@ -18,18 +18,51 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let provider: AIProvider = createProvider();
 
 function extractJSON(text: string): string {
-  // Strip markdown code fences if present (Claude often wraps JSON in ```json ... ```)
+  // 1. Try the raw text as-is (works when json_object mode returns clean JSON)
+  const trimmed = text.trim();
+  try {
+    JSON.parse(trimmed);
+    return trimmed;
+  } catch {}
+
+  // 2. Strip markdown code fences if present (Claude often wraps JSON in ```json ... ```)
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  let json = fenceMatch ? fenceMatch[1] : text;
-  
-  // Find the actual JSON object — skip any preamble text
-  const jsonStart = json.indexOf('{');
-  const jsonEnd = json.lastIndexOf('}');
-  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-    json = json.substring(jsonStart, jsonEnd + 1);
+  if (fenceMatch) {
+    const fenced = fenceMatch[1].trim();
+    try {
+      JSON.parse(fenced);
+      return fenced;
+    } catch {}
   }
   
-  return json.trim();
+  // 3. Bracket-match: find the outermost { ... } using depth tracking
+  //    This avoids the old bug where indexOf/lastIndexOf matched braces inside string values
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        return trimmed.substring(start, i + 1);
+      }
+    }
+  }
+  
+  // 4. Fallback: return as-is and let the validator handle it
+  return trimmed;
 }
 
 // ─── Rate Limiting ───────────────────────────────────────────────────
