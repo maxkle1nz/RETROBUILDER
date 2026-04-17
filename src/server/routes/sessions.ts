@@ -6,8 +6,8 @@ import {
   analyzeBlueprintGaps,
   analyzeBlueprintImpact,
   analyzeSessionReadiness,
-  runSessionAdvancedAction,
 } from '../session-analysis.js';
+import { runSessionAdvancedAction } from '../session-advanced.js';
 import {
   createSession,
   deleteSession,
