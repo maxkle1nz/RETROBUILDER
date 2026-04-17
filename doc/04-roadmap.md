@@ -24,7 +24,8 @@ Progress at v0.6.1: **~95% of original roadmap complete**. Items 3, 4, 6, 8, 9, 
 |---|---|---|
 | Blast radius node highlighting | ✅ Done | Red pulse + orange glow (v0.3.0) |
 | Priority badges on nodes | ✅ Done | P1/P2/P3 build order indicators (v0.4.0) |
-| AC indicators on nodes | ✅ Done | Acceptance criteria count on CyberNode (v0.4.0) |
+| AC indicators on nodes | ✅ Done | Replaced by Demystifier metrics grid with AC / EH / CTR / RCH slots on CyberNode (design branch) |
+| Demystifier card compaction | ✅ Done | CyberNode redesigned into compact Demystifier card + tighter dagre spacing |
 | Data flow arrows on links | ❌ Pending | Edges lack directional indicators |
 | Node clustering / grouping | ❌ Pending | Large graphs benefit from visual grouping |
 | Physics stabilization | 🟡 Partial | dagre auto-layout works; no interactive physics tuning |

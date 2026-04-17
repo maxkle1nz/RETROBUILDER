@@ -47,6 +47,9 @@ interface GraphState {
   highlightedNodes: Set<string>;
   highlightSource: string | null; // which node triggered the highlight
 
+  // Spotlight: signals GraphView to center on this node
+  focusNodeId: string | null;
+
   // Multi-select for batch operations
   selectedNodes: Set<string>;
 
@@ -72,6 +75,8 @@ interface GraphState {
   addLink: (link: LinkData) => void;
   setHighlightedNodes: (nodeIds: string[], source: string | null) => void;
   clearHighlightedNodes: () => void;
+  setFocusNodeId: (id: string) => void;
+  clearFocusNodeId: () => void;
   toggleNodeSelection: (nodeId: string) => void;
   clearNodeSelection: () => void;
   setSelectedNodes: (nodeIds: string[]) => void;
@@ -123,6 +128,7 @@ export const useGraphStore = create<GraphState>()(
         isRightPanelOpen: false,
         highlightedNodes: new Set<string>(),
         highlightSource: null,
+        focusNodeId: null,
         selectedNodes: new Set<string>(),
         activeProvider: 'xai',
         activeModel: null,
@@ -197,6 +203,8 @@ export const useGraphStore = create<GraphState>()(
           highlightedNodes: new Set<string>(),
           highlightSource: null
         }),
+        setFocusNodeId: (id) => set({ focusNodeId: id }),
+        clearFocusNodeId: () => set({ focusNodeId: null }),
         toggleNodeSelection: (nodeId) => set((state) => {
           const next = new Set(state.selectedNodes);
           if (next.has(nodeId)) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -30,34 +30,122 @@ const nodeTypes = {
   cyber: CyberNode,
 };
 
+/** Maps node type → neon edge colour */
+const TYPE_EDGE_COLOR: Record<string, string> = {
+  frontend: '#00f2ff',
+  backend:  '#b026ff',
+  database: '#ff9d00',
+  security: '#ff003c',
+  external: '#00ff66',
+};
+
+function buildEdgeStyle(
+  edge: Edge,
+  activeNodeId: string | null,
+  typeColorMap: Record<string, string>,
+): Partial<Edge> {
+  const isActive =
+    activeNodeId !== null &&
+    (edge.source === activeNodeId || edge.target === activeNodeId);
+
+  const sourceColor = typeColorMap[edge.source] ?? 'var(--color-accent)';
+
+  if (isActive) {
+    return {
+      animated: true,
+      style: {
+        stroke: sourceColor,
+        strokeWidth: 2,
+        filter: `drop-shadow(0 0 4px ${sourceColor})`,
+      },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: sourceColor,
+      },
+      labelStyle: {
+        fill: sourceColor,
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 9,
+        fontWeight: 600,
+        letterSpacing: '0.08em',
+      },
+      labelBgStyle: {
+        fill: 'rgba(5,6,8,0.82)',
+        stroke: `${sourceColor}55`,
+      },
+    };
+  }
+
+  return {
+    animated: false,
+    style: {
+      stroke: 'rgba(255,255,255,0.06)',
+      strokeWidth: 1,
+    },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: 'rgba(255,255,255,0.06)',
+    },
+    label: undefined,
+    labelStyle: undefined,
+    labelBgStyle: undefined,
+  };
+}
+
 function Flow() {
-  const { graphData, setSelectedNode, addLink, setSelectedNodes, clearNodeSelection } = useGraphStore();
-  
-  // Correct usage of zundo v2 with React
+  const {
+    graphData,
+    setSelectedNode,
+    addLink,
+    setSelectedNodes,
+    clearNodeSelection,
+    selectedNode,
+  } = useGraphStore();
+
   const undo = useGraphStore.temporal.getState().undo;
   const redo = useGraphStore.temporal.getState().redo;
-  const pastStates = useStore(useGraphStore.temporal, (state) => state.pastStates);
-  const futureStates = useStore(useGraphStore.temporal, (state) => state.futureStates);
-  
+  const pastStates  = useStore(useGraphStore.temporal, (s) => s.pastStates);
+  const futureStates = useStore(useGraphStore.temporal, (s) => s.futureStates);
+
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { fitView } = useReactFlow();
+  const { fitView, setCenter, getNodes } = useReactFlow();
 
-  // Context menu state
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string; nodeLabel: string } | null>(null);
+  // Which node is currently being hovered
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const activeNodeId = selectedNode?.id ?? hoveredNodeId;
+
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number; nodeId: string; nodeLabel: string
+  } | null>(null);
+
+  // Map nodeId → typeColor (rebuilt when graphData changes)
+  const typeColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const n of graphData.nodes) {
+      map[n.id] = TYPE_EDGE_COLOR[n.type ?? ''] ?? 'var(--color-accent)';
+    }
+    return map;
+  }, [graphData.nodes]);
+
+  // Re-style all edges reactively when hovered / selected node changes
+  useEffect(() => {
+    setEdges((prev) =>
+      prev.map((e) => {
+        const updates = buildEdgeStyle(e, activeNodeId, typeColorMap);
+        return { ...e, ...updates };
+      }),
+    );
+  }, [activeNodeId, typeColorMap, setEdges]);
 
   const handleAutoLayout = useCallback(() => {
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-      nodes,
-      edges,
-      'TB'
-    );
-    setNodes([...layoutedNodes]);
-    setEdges([...layoutedEdges]);
+    const { nodes: ln, edges: le } = getLayoutedElements(nodes, edges, 'TB');
+    setNodes([...ln]);
+    setEdges([...le]);
     setTimeout(() => fitView({ duration: 800 }), 50);
   }, [nodes, edges, setNodes, setEdges, fitView]);
 
-  // Transform graphData (from LLM) into React Flow format
+  // Transform graphData into React Flow format
   useEffect(() => {
     if (!graphData || graphData.nodes.length === 0) {
       setNodes([]);
@@ -77,32 +165,54 @@ function Flow() {
       source: l.source,
       target: l.target,
       label: l.label,
-      animated: true,
-      className: 'animated',
-      style: { stroke: 'var(--color-accent)' },
+      animated: false,
+      style: { stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1 },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: 'var(--color-accent)',
+        color: 'rgba(255,255,255,0.06)',
       },
     }));
 
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       initialNodes,
       initialEdges,
-      'TB'
+      'TB',
     );
 
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
-    
-    // Fit view after initial layout
     setTimeout(() => fitView({ duration: 800 }), 100);
   }, [graphData, setNodes, setEdges, fitView]);
 
-  const onNodeClick = useCallback((_, node: Node) => {
+  // Focus on a node via store (for Spotlight)
+  const focusNodeId = useGraphStore((s) => s.focusNodeId);
+  const clearFocusNodeId = useGraphStore((s) => s.clearFocusNodeId);
+  useEffect(() => {
+    if (!focusNodeId) return;
+    const allNodes = getNodes();
+    const target = allNodes.find((n) => n.id === focusNodeId);
+    if (target) {
+      setCenter(
+        target.position.x + (target.measured?.width ?? 240) / 2,
+        target.position.y + (target.measured?.height ?? 120) / 2,
+        { zoom: 1.4, duration: 600 },
+      );
+    }
+    clearFocusNodeId();
+  }, [focusNodeId, getNodes, setCenter, clearFocusNodeId]);
+
+  const onNodeClick = useCallback((_: unknown, node: Node) => {
     setSelectedNode(node.data as any);
     useGraphStore.getState().openRightPanel();
   }, [setSelectedNode]);
+
+  const onNodeMouseEnter = useCallback((_: unknown, node: Node) => {
+    setHoveredNodeId(node.id);
+  }, []);
+
+  const onNodeMouseLeave = useCallback(() => {
+    setHoveredNodeId(null);
+  }, []);
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
     event.preventDefault();
@@ -121,21 +231,25 @@ function Flow() {
     useGraphStore.getState().closeRightPanel();
   }, [setSelectedNode, clearNodeSelection]);
 
-  const onSelectionChange = useCallback(({ nodes: selectedFlowNodes }: OnSelectionChangeParams) => {
-    const ids = selectedFlowNodes.map((n) => n.id);
-    setSelectedNodes(ids);
+  const onSelectionChange = useCallback(({ nodes: sel }: OnSelectionChangeParams) => {
+    setSelectedNodes(sel.map((n) => n.id));
   }, [setSelectedNodes]);
 
   const onConnect = useCallback((params: Connection) => {
-    setEdges((eds) => rfAddEdge({
-      ...params,
-      animated: true,
-      className: 'animated',
-      style: { stroke: 'var(--color-accent)' },
-      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--color-accent)' },
-    }, eds));
-    
-    // Sync with global store
+    setEdges((eds) =>
+      rfAddEdge(
+        {
+          ...params,
+          animated: false,
+          style: { stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1 },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: 'rgba(255,255,255,0.06)',
+          },
+        },
+        eds,
+      ),
+    );
     addLink({ source: params.source, target: params.target });
   }, [setEdges, addLink]);
 
@@ -147,6 +261,8 @@ function Flow() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         onConnect={onConnect}
@@ -159,25 +275,25 @@ function Flow() {
         minZoom={0.1}
         maxZoom={4}
       >
-        <Background 
-          variant={BackgroundVariant.Dots} 
-          gap={24} 
-          size={1} 
-          color="var(--color-border-subtle)" 
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={24}
+          size={1}
+          color="var(--color-border-subtle)"
         />
-        <Controls 
+        <Controls
           className="bg-surface border border-border-subtle fill-text-main"
           showInteractive={true}
         />
-        <MiniMap 
+        <MiniMap
           nodeColor={(n) => {
             switch (n.data?.type) {
               case 'frontend': return '#00f2ff';
-              case 'backend': return '#b026ff';
+              case 'backend':  return '#b026ff';
               case 'database': return '#ff9d00';
               case 'security': return '#ff003c';
               case 'external': return '#00ff66';
-              default: return '#8892a0';
+              default:         return '#8892a0';
             }
           }}
           maskColor="rgba(5, 6, 8, 0.8)"
@@ -197,14 +313,14 @@ function Flow() {
         </Panel>
 
         <Panel position="top-left" className="flex gap-2">
-          <button 
+          <button
             onClick={() => undo()}
             disabled={pastStates.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border-subtle text-text-dim hover:text-accent hover:border-accent disabled:opacity-50 disabled:hover:text-text-dim disabled:hover:border-border-subtle transition-colors rounded text-[10px] uppercase tracking-widest font-bold cursor-pointer"
           >
             <Undo2 size={14} /> Undo
           </button>
-          <button 
+          <button
             onClick={() => redo()}
             disabled={futureStates.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border-subtle text-text-dim hover:text-accent hover:border-accent disabled:opacity-50 disabled:hover:text-text-dim disabled:hover:border-border-subtle transition-colors rounded text-[10px] uppercase tracking-widest font-bold cursor-pointer"
@@ -212,14 +328,15 @@ function Flow() {
             <Redo2 size={14} /> Redo
           </button>
         </Panel>
+
         <Panel position="top-right" className="flex gap-2">
-          <button 
+          <button
             onClick={() => fitView({ duration: 800 })}
             className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border-subtle text-text-dim hover:text-accent hover:border-accent transition-colors rounded text-[10px] uppercase tracking-widest font-bold cursor-pointer"
           >
             <Maximize size={14} /> Center
           </button>
-          <button 
+          <button
             onClick={handleAutoLayout}
             className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border-subtle text-text-dim hover:text-accent hover:border-accent transition-colors rounded text-[10px] uppercase tracking-widest font-bold cursor-pointer"
           >
@@ -228,7 +345,6 @@ function Flow() {
         </Panel>
       </ReactFlow>
 
-      {/* Node context menu */}
       {contextMenu && (
         <NodeContextMenu
           x={contextMenu.x}

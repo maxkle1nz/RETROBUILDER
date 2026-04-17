@@ -19,7 +19,7 @@ import type { AIProvider, ChatMessage, CompletionConfig, ModelInfo } from './ind
 
 const BRIDGE_DEFAULT_URL = process.env.THEBRIDGE_URL || 'http://127.0.0.1:7788/v1';
 const BRIDGE_BASE_URL = BRIDGE_DEFAULT_URL.replace(/\/v1$/, '');
-const BRIDGE_DEFAULT_MODEL = process.env.THEBRIDGE_MODEL || 'github-copilot/gpt-5.4';
+const BRIDGE_DEFAULT_MODEL = process.env.THEBRIDGE_MODEL || 'github-copilot/claude-opus-4.7';
 
 export function createBridgeProvider(): AIProvider {
   const client = new OpenAI({
@@ -177,6 +177,7 @@ export function createBridgeProvider(): AIProvider {
         console.warn('[BRIDGE] Failed to list models, returning defaults:', error);
         // Static fallback — known bridge provider models
         return [
+          { id: 'github-copilot/claude-opus-4.7', name: 'Copilot › Claude Opus 4.7', provider: 'bridge' },
           { id: 'github-copilot/claude-opus-4.6', name: 'Copilot › Claude Opus 4.6', provider: 'bridge' },
           { id: 'github-copilot/claude-sonnet-4.6', name: 'Copilot › Claude Sonnet 4.6', provider: 'bridge' },
           { id: 'github-copilot/claude-sonnet-4', name: 'Copilot › Claude Sonnet 4', provider: 'bridge' },
