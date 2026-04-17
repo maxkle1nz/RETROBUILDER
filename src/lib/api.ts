@@ -20,6 +20,9 @@ export interface NodeData {
   error_handling?: string[];
   priority?: number;
   group: number;
+  researchContext?: string;
+  researchMeta?: Record<string, unknown>;
+  constructionNotes?: string;
 }
 
 export interface LinkData {
@@ -151,6 +154,15 @@ export interface SystemState {
   manifesto: string;
   architecture: string;
   graph: GraphData;
+  explanation?: string;
+  meta?: {
+    provider?: string;
+    fallbackUsed?: boolean;
+    selfCorrected?: boolean;
+    pass1Issues?: number;
+    pass1Nodes?: number;
+    enhancedNodes?: number;
+  };
 }
 
 export interface AnalysisResult {
@@ -518,4 +530,152 @@ export async function runSessionAdvancedDraft(
     throw new Error(data.error || 'Failed to run advanced session action');
   }
   return res.json();
+}
+
+// ─── KOMPLETUS Pipeline ──────────────────────────────────────────────
+
+export interface KompletusEvent {
+  stage: string;
+  status: 'running' | 'done' | 'error';
+  message?: string;
+  data?: Record<string, unknown>;
+}
+
+// ─── SPECULAR AUDIT Types (SSOT: mirrors backend exactly) ─────────────
+
+export interface UserMoment {
+  id: string;
+  label: string;
+  backendStages: string[];
+  userQuestion: string;
+}
+
+export interface NodeScreenEntry {
+  nodeId: string;
+  label: string;
+  hasUserSurface: boolean;
+  screenType?: string;
+  userActions?: string[];
+  dataDisplayed?: string[];
+}
+
+export interface CoverageEntry {
+  backendPhase: string;
+  momentId: string;
+  momentLabel: string;
+  confidence: number;
+}
+
+export interface SpecularAuditResult {
+  moments: UserMoment[];
+  coverage: CoverageEntry[];
+  nodeScreenMap: NodeScreenEntry[];
+  parityScore: number;
+}
+
+export interface KompletusResult {
+  graph: GraphData;
+  manifesto: string;
+  architecture: string;
+  explanation: string;
+  research: Record<string, { report: string; meta: Record<string, unknown> }>;
+  specular: SpecularAuditResult;
+  l1ght: {
+    expandedContracts: number;
+    crossNodeIssues: number;
+    artifacts: { routeMap?: string; envTemplate?: string; dbSchema?: string };
+  };
+  qualityGate: { passed: boolean; iterations: number; remainingIssues: string[] };
+  meta: {
+    totalTimeMs: number;
+    stages: Record<string, { durationMs: number; details?: Record<string, unknown> }>;
+  };
+}
+
+export async function runKompletus(
+  prompt: string,
+  onProgress: (event: KompletusEvent) => void,
+): Promise<KompletusResult> {
+  const res = await fetch('/api/ai/kompletus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, model: activeModel() }),
+  });
+
+  if (!res.ok && res.headers.get('content-type')?.includes('application/json')) {
+    await throwApiError(res, 'KOMPLETUS pipeline failed');
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = res.body?.getReader();
+    if (!reader) return reject(new Error('No response body'));
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResult: KompletusResult | null = null;
+    let lastError: string | null = null;
+    // CRITICAL: eventType must persist across chunk boundaries
+    let eventType = '';
+
+    function processLines(text: string) {
+      buffer += text;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // keep incomplete last line
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.substring(7).trim();
+        } else if (line.startsWith('data: ') && eventType) {
+          const raw = line.substring(6);
+          try {
+            const data = JSON.parse(raw);
+            if (eventType === 'progress') {
+              onProgress(data as KompletusEvent);
+            } else if (eventType === 'result') {
+              finalResult = data as KompletusResult;
+            } else if (eventType === 'error') {
+              lastError = data.error || 'Pipeline error';
+            }
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'parse error';
+            console.warn(`[KOMPLETUS SSE] Failed to parse ${eventType} (${raw.length} chars): ${msg}`);
+            if (eventType === 'result') {
+              lastError = `Result JSON parse failed (${raw.length} chars): ${msg}`;
+            }
+          }
+          eventType = '';
+        } else if (line === '') {
+          // SSE blank line separator — reset event type
+          eventType = '';
+        }
+      }
+    }
+
+    async function pump() {
+      try {
+        while (true) {
+          const { done, value } = await reader!.read();
+          if (done) break;
+          processLines(decoder.decode(value, { stream: true }));
+        }
+        // Flush remaining buffer — reset first to prevent doubling
+        if (buffer.trim()) {
+          const remaining = buffer;
+          buffer = '';
+          processLines(remaining + '\n');
+        }
+        if (lastError && !finalResult) {
+          reject(new Error(lastError));
+        } else if (finalResult) {
+          resolve(finalResult);
+        } else {
+          reject(new Error('Pipeline stream ended without result event'));
+        }
+      } catch (e) {
+        reject(e);
+      }
+    }
+
+    pump();
+  });
 }

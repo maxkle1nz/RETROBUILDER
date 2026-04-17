@@ -6,6 +6,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.6.0] — 2026-04-17
+
+### Added
+- **KOMPLETUS Pipeline** — 8-stage autonomous blueprint engine (`kompletus-pipeline.ts`):
+  - KONSTRUKTOR → HARDENER → SMART TRIAGE → DEEP RESEARCH → SPECULAR AUDIT → L1GHT PRE-FLIGHT → QUALITY GATE → KOMPLETUS
+  - SSE streaming with per-stage progress events
+  - Full report modal (`KompletusReport.tsx`) with tabs: Modules, Artifacts, Specular, Summary
+- **SPECULAR AUDIT (Stage 5)** — UIX parity mapping:
+  - Generates ≤5 "User Moments" per pipeline in domain language
+  - Node-to-screen surface coverage matrix
+  - Parity score (0-100) measuring backend↔UIX alignment
+  - `SpecularView` component with parity gauge, moment cards, coverage matrix
+- **Google Gemini Provider** (`providers/gemini.ts`) — Full provider with:
+  - **Key Rotation** — `KeyRotator` class with round-robin on 429/quota errors
+  - Support for `GEMINI_API_KEYS` (comma-separated) and `GEMINI_API_KEY` (single)
+  - Default model: `gemini-3-pro-image-preview` (Nano Banana Pro)
+  - Fallback: `gemini-3.1-flash-image-preview` (Nano Banana 2)
+  - Health probe in `provider-runtime.ts`
+  - Fallback chain: active → gemini → bridge → openai → xai
+- **L1GHT Pre-Flight** (`l1ght-preflight.ts`) — Contract expansion + cross-node validation
+- **Mirror Test** (`tests/kompletus-e2e.ts`) — E2E test with SPECULAR assertions:
+  - Validates moments count (1-5), parity score (0-100), coverage
+  - Uses same SSE parser as UIX (Layer 3 technical parity)
+- **SPECULAR Protocol v7** — Knowledge item with complete protocol documentation
+
+### Changed
+- **Architecture Analyzer** — Strip research metadata before sending to LLM critic:
+  - Removes `researchContext`, `researchMeta`, `constructionNotes` from graph payload
+  - Adds `researchStatus: "grounded"` flag for research-validated nodes
+  - Updated prompt with `IMPORTANT DISTINCTIONS` to prevent code/knowledge confusion
+- **Provider Fallback Chain** — Updated to include Gemini: active → gemini → bridge → openai → xai
+- **API Types** — `KompletusResult` interface synchronized across pipeline, client, and test (SSOT)
+
+### Fixed
+- **Analyze Architecture** — LLM no longer confuses deep research blobs with system modules
+
+---
+
 ## [0.4.0] — 2026-04-16
 
 ### Added

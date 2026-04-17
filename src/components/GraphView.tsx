@@ -14,7 +14,8 @@ import {
   useReactFlow,
   ReactFlowProvider,
   Connection,
-  addEdge as rfAddEdge
+  addEdge as rfAddEdge,
+  type OnSelectionChangeParams,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Maximize, Network, Undo2, Redo2 } from 'lucide-react';
@@ -30,7 +31,7 @@ const nodeTypes = {
 };
 
 function Flow() {
-  const { graphData, setSelectedNode, addLink } = useGraphStore();
+  const { graphData, setSelectedNode, addLink, setSelectedNodes, clearNodeSelection } = useGraphStore();
   
   // Correct usage of zundo v2 with React
   const undo = useGraphStore.temporal.getState().undo;
@@ -116,8 +117,14 @@ function Flow() {
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
     setContextMenu(null);
+    clearNodeSelection();
     useGraphStore.getState().closeRightPanel();
-  }, [setSelectedNode]);
+  }, [setSelectedNode, clearNodeSelection]);
+
+  const onSelectionChange = useCallback(({ nodes: selectedFlowNodes }: OnSelectionChangeParams) => {
+    const ids = selectedFlowNodes.map((n) => n.id);
+    setSelectedNodes(ids);
+  }, [setSelectedNodes]);
 
   const onConnect = useCallback((params: Connection) => {
     setEdges((eds) => rfAddEdge({
@@ -143,6 +150,7 @@ function Flow() {
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         onConnect={onConnect}
+        onSelectionChange={onSelectionChange}
         nodeTypes={nodeTypes}
         fitView
         panOnScroll={true}

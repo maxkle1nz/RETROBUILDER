@@ -60,6 +60,7 @@ RETROBUILDER supports multiple AI providers through a SSOT (Single Source of Tru
 | Provider | Config | Key Required |
 |---|---|---|
 | **xAI Grok** | `AI_PROVIDER="xai"` | `XAI_API_KEY` |
+| **Google Gemini** | `AI_PROVIDER="gemini"` | `GEMINI_API_KEY` or `GEMINI_API_KEYS` |
 | **OpenAI** | `AI_PROVIDER="openai"` | `OPENAI_API_KEY` |
 | **THE BRIDGE** | `AI_PROVIDER="bridge"` | None (local proxy) |
 
@@ -105,14 +106,14 @@ You can switch providers at runtime via the Model Selector panel in the UI — n
 
 | Metric | Value |
 |---|---|
-| Total files | 45 |
-| Total LOC | 5,596 |
-| Functions | 64 |
+| Total files | 50+ |
+| Total LOC | 7,200+ |
+| Functions | 80+ |
 | Classes | 2 |
-| Graph nodes | 136 |
-| Graph edges | 155 |
-| Highest fan-out | `api.ts` (23 dependents) |
-| Heaviest module | `server.ts` (781 LOC) |
+| Graph nodes | 791 |
+| Graph edges | 1,136 |
+| AI Providers | 4 (xAI, Gemini, OpenAI, Bridge) |
+| Pipeline Stages | 8 (KOMPLETUS) |
 
 ## Features
 
@@ -163,6 +164,30 @@ Watch your blueprint come to life in real-time:
 - **MiniMap illumination** — the minimap lights up as the build wave propagates
 - **Mission Complete** — final summary with files written, lines generated, and elapsed time
 - **SSE streaming** — real-time Server-Sent Events with exponential backoff reconnect
+
+### ⚡ KOMPLETUS — Full Pipeline Engine (v0.6.0)
+End-to-end blueprint generation with 8 autonomous stages:
+- **KONSTRUKTOR** — skeleton generation from natural language prompt
+- **HARDENER** — critic + dreamer pass (wiring, hardening, missing modules)
+- **SMART TRIAGE** — classifies modules by research depth needed
+- **DEEP RESEARCH** — parallel grounded research (Perplexity, Scholar, GitHub, CrossRef)
+- **SPECULAR AUDIT** — UIX parity mapping (user moments + coverage matrix)
+- **L1GHT PRE-FLIGHT** — contract expansion + cross-node validation
+- **QUALITY GATE** — final structural validation with 60 acceptance criteria
+- **KOMPLETUS** — delivery with full report modal
+
+### 🪞 SPECULAR — Full-Stack SSOT Protocol (v0.6.0)
+The SPECULAR protocol guarantees that every backend node has a validated UIX representation:
+- **Parsimônia** — max 4-5 user moments per pipeline, domain language only
+- **SSOT Architecture** — backend = truth, UIX + mirror test = pure consumers
+- **Mirror Test** — `tests/kompletus-e2e.ts` validates UIX parity end-to-end
+- **Autonomous Evolution (SPECULAR MODE)** — agent self-evolves, mirror test guards UIX
+
+### 🔑 Key Rotation (v0.6.0)
+Gemini provider supports comma-separated API keys for round-robin rotation:
+- Auto-rotate on 429/quota errors
+- `GEMINI_API_KEYS="key1,key2,key3"` in `.env.local`
+- Fully transparent to the rest of the system
 
 ## OMX Integration
 
@@ -239,8 +264,9 @@ The connection indicator in the top-right of the analysis panel shows green when
 |---|---|
 | Frontend | React 19, React Flow, Zustand, Framer Motion |
 | Backend | Express.js, TypeScript, Zod validation |
-| AI Providers | xAI Grok, OpenAI, THE BRIDGE |
+| AI Providers | xAI Grok, Google Gemini (key rotation), OpenAI, THE BRIDGE |
 | Graph Engine | m1nd (MCP stdio) |
+| Pipeline | KOMPLETUS (8-stage autonomous) |
 | Research | Perplexity, Semantic Scholar, GitHub, CrossRef |
 | Build | Vite 6 |
 | Styling | Tailwind CSS 4 |

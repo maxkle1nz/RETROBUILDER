@@ -14,9 +14,29 @@ export type ProviderProbe = {
 
 let activeProvider: AIProvider | null = null;
 
+function resolvePreferredProviderName() {
+  const configured = process.env.AI_PROVIDER;
+  if (configured && configured in PROVIDER_FACTORIES) {
+    return configured;
+  }
+  return 'xai';
+}
+
+function createBootSafeProvider() {
+  try {
+    return createProvider();
+  } catch (error: any) {
+    const fallback = resolvePreferredProviderName();
+    console.warn(
+      `[SSOT] Failed to initialize configured provider "${process.env.AI_PROVIDER || 'unset'}": ${error.message}. Falling back to ${fallback}.`,
+    );
+    return createProvider(fallback);
+  }
+}
+
 export function getActiveProvider() {
   if (!activeProvider) {
-    activeProvider = createProvider();
+    activeProvider = createBootSafeProvider();
   }
   return activeProvider;
 }
@@ -30,11 +50,11 @@ export async function setActiveProvider(providerName: string) {
 }
 
 export function getActiveProviderName() {
-  return getActiveProvider().name;
+  return activeProvider?.name || resolvePreferredProviderName();
 }
 
 function fallbackProviderOrder(activeProviderName: string): string[] {
-  const ordered = [activeProviderName, 'bridge', 'openai', 'xai'];
+  const ordered = [activeProviderName, 'gemini', 'bridge', 'openai', 'xai'];
   return [...new Set(ordered.filter(Boolean))];
 }
 
@@ -114,6 +134,22 @@ export async function probeProviderHealth(providerName: string): Promise<Provide
         const body = await res.text();
         return { status: 'offline', error: `[BRIDGE] ${res.status} ${body}`.slice(0, 300) };
       }
+      case 'gemini': {
+        const geminiKey = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '').split(',')[0]?.trim();
+        if (!geminiKey) {
+          return { status: 'missing_config', error: '[Gemini] GEMINI_API_KEY or GEMINI_API_KEYS environment variable is required.' };
+        }
+        const model = process.env.GEMINI_MODEL || 'gemini-3-pro-image-preview';
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}?key=${geminiKey}`, {
+          signal: timeout,
+        });
+        if (res.ok) return { status: 'ready' };
+        const body = await res.text();
+        return {
+          status: res.status === 403 || res.status === 429 ? 'blocked' : 'offline',
+          error: `[Gemini] ${res.status} ${body}`.slice(0, 300),
+        };
+      }
       default:
         return { status: 'offline', error: 'Unknown provider.' };
     }
@@ -126,6 +162,7 @@ export async function probeProviderHealth(providerName: string): Promise<Provide
 }
 
 export async function collectProviderStates() {
+  const currentName = getActiveProviderName();
   const names = getProviderNames();
   const providers = [];
 
@@ -137,7 +174,7 @@ export async function collectProviderStates() {
         name: p.name,
         label: p.label,
         defaultModel: p.defaultModel,
-        active: p.name === activeProvider.name,
+        active: p.name === currentName,
         status: probe.status,
         error: probe.error,
       });
@@ -146,7 +183,7 @@ export async function collectProviderStates() {
         name,
         label: name,
         defaultModel: null,
-        active: false,
+        active: name === currentName,
         status: probe.status,
         error: probe.error || e.message,
       });

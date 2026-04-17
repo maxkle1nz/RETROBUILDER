@@ -11,6 +11,8 @@ import {
   SessionSource,
   CodebaseImportMeta,
   SessionDocument,
+  KompletusResult,
+  KompletusEvent,
 } from '../lib/api';
 
 export type AppMode = 'architect' | 'm1nd' | 'builder';
@@ -45,6 +47,15 @@ interface GraphState {
   highlightedNodes: Set<string>;
   highlightSource: string | null; // which node triggered the highlight
 
+  // Multi-select for batch operations
+  selectedNodes: Set<string>;
+
+  // KOMPLETUS pipeline state
+  showKompletusReport: boolean;
+  kompletusResult: KompletusResult | null;
+  kompletusProgress: KompletusEvent[];
+  isKompletusRunning: boolean;
+
   setGraphData: (data: GraphData) => void;
   setManifesto: (manifesto: string) => void;
   setArchitecture: (architecture: string) => void;
@@ -61,6 +72,9 @@ interface GraphState {
   addLink: (link: LinkData) => void;
   setHighlightedNodes: (nodeIds: string[], source: string | null) => void;
   clearHighlightedNodes: () => void;
+  toggleNodeSelection: (nodeId: string) => void;
+  clearNodeSelection: () => void;
+  setSelectedNodes: (nodeIds: string[]) => void;
 
   // Provider/Model actions
   setActiveProvider: (provider: string) => void;
@@ -76,6 +90,14 @@ interface GraphState {
   closeEnvConfigModal: () => void;
   hydrateSession: (session: SessionDocument) => void;
   clearSession: () => void;
+
+  // KOMPLETUS actions
+  openKompletusReport: (result: KompletusResult) => void;
+  closeKompletusReport: () => void;
+  setKompletusRunning: (running: boolean) => void;
+  addKompletusProgress: (event: KompletusEvent) => void;
+  clearKompletusProgress: () => void;
+  updateKompletusNode: (nodeId: string, updates: Partial<NodeData>) => void;
 }
 
 export const useGraphStore = create<GraphState>()(
@@ -101,10 +123,15 @@ export const useGraphStore = create<GraphState>()(
         isRightPanelOpen: false,
         highlightedNodes: new Set<string>(),
         highlightSource: null,
+        selectedNodes: new Set<string>(),
         activeProvider: 'xai',
         activeModel: null,
         availableProviders: [],
         availableModels: [],
+        showKompletusReport: false,
+        kompletusResult: null,
+        kompletusProgress: [],
+        isKompletusRunning: false,
         setGraphData: (data) => set((state) => ({
           graphData: data,
           sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
@@ -170,6 +197,17 @@ export const useGraphStore = create<GraphState>()(
           highlightedNodes: new Set<string>(),
           highlightSource: null
         }),
+        toggleNodeSelection: (nodeId) => set((state) => {
+          const next = new Set(state.selectedNodes);
+          if (next.has(nodeId)) {
+            next.delete(nodeId);
+          } else {
+            next.add(nodeId);
+          }
+          return { selectedNodes: next };
+        }),
+        clearNodeSelection: () => set({ selectedNodes: new Set<string>() }),
+        setSelectedNodes: (nodeIds) => set({ selectedNodes: new Set(nodeIds) }),
         setActiveProvider: (provider) => set({ activeProvider: provider }),
         setActiveModel: (model) => set({ activeModel: model }),
         setAvailableProviders: (providers) => set({ availableProviders: providers }),
@@ -197,6 +235,7 @@ export const useGraphStore = create<GraphState>()(
           pendingProposal: null,
           highlightedNodes: new Set<string>(),
           highlightSource: null,
+          selectedNodes: new Set<string>(),
           showSessionLauncher: false,
           sessionSaveState: 'saved',
         }),
@@ -213,8 +252,32 @@ export const useGraphStore = create<GraphState>()(
           pendingProposal: null,
           highlightedNodes: new Set<string>(),
           highlightSource: null,
+          selectedNodes: new Set<string>(),
           showSessionLauncher: true,
           sessionSaveState: 'idle',
+        }),
+
+        // KOMPLETUS actions
+        openKompletusReport: (result) => set({ showKompletusReport: true, kompletusResult: result }),
+        closeKompletusReport: () => set({ showKompletusReport: false }),
+        setKompletusRunning: (running) => set({ isKompletusRunning: running }),
+        addKompletusProgress: (event) => set((state) => ({
+          kompletusProgress: [...state.kompletusProgress, event],
+        })),
+        clearKompletusProgress: () => set({ kompletusProgress: [], kompletusResult: null }),
+        updateKompletusNode: (nodeId, updates) => set((state) => {
+          if (!state.kompletusResult) return state;
+          return {
+            kompletusResult: {
+              ...state.kompletusResult,
+              graph: {
+                ...state.kompletusResult.graph,
+                nodes: state.kompletusResult.graph.nodes.map(n =>
+                  n.id === nodeId ? { ...n, ...updates } : n,
+                ),
+              },
+            },
+          };
         }),
       }),
       {

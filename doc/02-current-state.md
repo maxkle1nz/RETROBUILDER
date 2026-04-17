@@ -1,6 +1,6 @@
 # Current State of the System
 
-As of v0.5.0 (2026-04-16), the following features and components are implemented:
+As of v0.6.0 (2026-04-17), the following features and components are implemented:
 
 ## 1. Frontend Interface (UI/UX)
 - **Premium Typography:** Orbitron (display/header), Inter (UI), JetBrains Mono (code/terminal) — loaded from Google Fonts.
@@ -21,12 +21,8 @@ As of v0.5.0 (2026-04-16), the following features and components are implemented
 - **Priority Badges:** P1/P2/P3 build order indicators rendered on CyberNode components.
 - **AC Indicators:** Acceptance criteria count displayed on each node.
 - **OMX Export Button:** "Export to OMX" in the M1ND RightPanel generates a downloadable `.omx/plan.md` for autonomous materialization and activates Build Mode.
-- **BU1LDER Mode (v0.5.0):** Live construction environment with:
-  - **CyberNodeBuild:** Dark-to-light animated nodes (dormant → queued → building → complete → error) with shimmer, flood-fill, and propagation ring effects.
-  - **BuildConsole:** Structured real-time log feed with active node progress, file tracking, and "Mission Complete" metrics screen.
-  - **BuildView:** ReactFlow canvas with build-mode nodes, MiniMap illumination, and fading dormant overlay.
-  - **Build Tracker Checklist:** Dual-mode sidebar that transforms from project skeleton into live node-by-node construction tracker.
-  - **SSE Streaming:** Real-time Server-Sent Events from the OMX simulation engine with exponential backoff reconnect.
+- **BU1LDER Mode (v0.5.0):** Live construction environment with CyberNodeBuild animations, BuildConsole, BuildView, Build Tracker Checklist, SSE Streaming.
+- **KOMPLETUS Report Modal (v0.6.0):** Full-screen report with tabs: Modules (expandable node list), Artifacts (L1GHT outputs), Specular (parity gauge + user moments + coverage matrix), Summary.
 
 ## 2. Backend API (Express)
 - **Secure API Gateway:** Express.js server (`server.ts`) with all AI keys server-side only.
@@ -37,69 +33,89 @@ As of v0.5.0 (2026-04-16), the following features and components are implemented
   - `/api/ai/generateGraphStructure` — DAG generation from prompts
   - `/api/ai/generateProposal` — Modification plan proposals
   - `/api/ai/applyProposal` — Execute proposals against current graph
-  - `/api/ai/analyzeArchitecture` — Structural audit and optimization
+  - `/api/ai/analyzeArchitecture` — Structural audit and optimization (strips research metadata)
   - `/api/ai/performDeepResearch` — Multi-source deep research on individual modules
-  - `/api/omx/stream/:sessionId` — SSE endpoint for live build streaming (v0.5.0)
+  - `/api/ai/kompletus` — Full KOMPLETUS pipeline (SSE streaming, 8 stages)
+  - `/api/omx/stream/:sessionId` — SSE endpoint for live build streaming
 
 ## 3. AI Integration (SSOT Provider Layer)
 - **Provider Factory:** `src/server/providers/` with provider-agnostic factory pattern.
-- **Three Providers:**
+- **Four Providers:**
   - `xai` — X.AI Grok via `https://api.x.ai/v1` (OpenAI SDK)
+  - `gemini` — Google Gemini via REST API with **key rotation** (`KeyRotator` class, round-robin on 429/quota)
   - `openai` — Direct OpenAI API
-  - `bridge` — Local proxy via [THE BRIDGE](https://github.com/maxkle1nz/thebridge) at `http://127.0.0.1:7788/v1` (zero API keys, includes Copilot/Codex models)
+  - `bridge` — Local proxy via [THE BRIDGE](https://github.com/maxkle1nz/thebridge) at `http://127.0.0.1:7788/v1`
+- **Key Rotation:** `GEMINI_API_KEYS="key1,key2,key3"` for round-robin rotation with auto-fallback on rate limits.
+- **Fallback Chain:** `active provider → gemini → bridge → openai → xai`
 - **Runtime Model Selector:** Switch providers and models without restart via floating config panel.
 - **Live Model Discovery:** `/api/providers` endpoint lists available models per provider.
-- Provider selection via `AI_PROVIDER` environment variable (`xai` | `openai` | `bridge`) or runtime API.
-- Structured JSON output formatting for valid graph data.
+- **Health Probes:** All 4 providers have dedicated health probes in `provider-runtime.ts`.
 
 ## 4. m1nd Engine Integration
 - **Server-Side MCP Bridge:** `M1ndBridge` class (`src/server/m1nd-bridge.ts`) spawns `m1nd-mcp` as a child process and communicates via JSON-RPC 2.0 over stdin/stdout (MCP stdio transport).
 - **HTTP API (14 endpoints):** `/api/m1nd/*` for health, activate, impact, predict, validate, diagram, layers, metrics, panoramic, search, hypothesize, missing, ingest, and structural-context.
-- **Frontend HTTP Client:** `M1ndClient` class (`src/lib/m1nd.ts`) communicates with the backend at `/api/m1nd/*`. No direct WebSocket — the Express server handles process management and reconnection.
+- **Frontend HTTP Client:** `M1ndClient` class (`src/lib/m1nd.ts`) communicates with the backend at `/api/m1nd/*`.
 - **Structural Injection:** Kreator proposals are grounded in m1nd blast radius and co-change prediction data.
 - **Blast Radius Visualization:** Red pulse for blast origin, orange glow for impact zone nodes.
-- **M1ND Mode UI:** RightPanel provides 6 analysis action buttons (Impact, Predict, Validate, Layers, Metrics, Diagram) with result display.
 - **Graceful Degradation:** All m1nd calls return `null` on failure — the Kreator continues without structural awareness.
 
 ## 5. Deep Research Engine
-- **Multi-Source Research:** `src/server/web-research.ts` integrates:
-  - Perplexity AI (sonar model)
-  - Serper Web + Scholar Search
-  - Semantic Scholar API
-  - CrossRef API
-  - GitHub Code Search
-  - Jina Reader (URL → structured text)
+- **Multi-Source Research:** `src/server/web-research.ts` integrates: Perplexity AI, Serper Web + Scholar Search, Semantic Scholar API, CrossRef API, GitHub Code Search, Jina Reader.
 - **Document Bindings:** Research results are cross-referenced with m1nd graph nodes.
 - **API Endpoint:** `/api/ai/performDeepResearch` with timeout-protected fetches.
 
 ## 6. OMX Bridge (v0.4.0)
 - **Export Pipeline:** Topological sort (Kahn's algorithm) computes build priority from dependency edges.
-- **Acceptance Criteria:** 2–5 testable conditions per module, enforced via Zod schema and generated by AI.
-- **Error Handling Models:** Failure modes and circuit-breaker strategies per node.
+- **Acceptance Criteria:** 2–5 testable conditions per module, enforced via Zod schema.
 - **Output Format:** `.omx/plan.md` for autonomous materialization by OMX `$ralph`.
 
 ## 7. BU1LDER — Live Construction Environment (v0.5.0)
-- **State Machine:** `useBuildStore` (Zustand) tracks per-node build status through 5 states: dormant → queued → building → complete → error.
-- **SSE Stream:** `useOMXStream` hook connects to `/api/omx/stream/:sessionId` with exponential backoff auto-reconnect.
-- **OMX Runner:** Server-side topological sort (Kahn's algorithm) drives a simulation engine that emits typed SSE events: `build_start`, `node_start`, `node_progress`, `node_complete`, `edge_activated`, `build_complete`.
-- **Visual System:** Dark-to-light paradigm — nodes start completely dark and illuminate as the build progresses, with shimmer animations during building and propagation rings on completion.
-- **Build Console:** Animated log feed with phase tracking, active node progress bar, error highlighting, and a "Mission Complete" summary screen with file/line/time metrics.
-- **3-Mode Architecture:** The app now supports ARCHITECT (cyan), M1ND (purple), and BU1LDER (green) — each with full CSS theming via `data-mode` attribute.
+- **State Machine:** `useBuildStore` (Zustand) tracks per-node build status: dormant → queued → building → complete → error.
+- **SSE Stream:** `useOMXStream` hook with exponential backoff auto-reconnect.
+- **Visual System:** Dark-to-light paradigm with shimmer animations and propagation rings.
+- **Build Console:** Animated log feed with "Mission Complete" summary screen.
+
+## 8. KOMPLETUS — Full Pipeline Engine (v0.6.0)
+- **8-Stage Pipeline:** `src/server/kompletus-pipeline.ts`
+  1. KONSTRUKTOR — skeleton generation from prompt
+  2. HARDENER — critic + dreamer pass (wiring + hardening)
+  3. SMART TRIAGE — classify modules by research depth
+  4. DEEP RESEARCH — parallel grounded research (6 sources)
+  5. SPECULAR AUDIT — UIX parity mapping (user moments + coverage)
+  6. L1GHT PRE-FLIGHT — contract expansion + cross-node validation
+  7. QUALITY GATE — final structural validation with acceptance criteria
+  8. KOMPLETUS — delivery with full report
+- **SSE Streaming:** Real-time progress events per stage via `/api/ai/kompletus`.
+- **Report Modal:** `KompletusReport.tsx` with 4 tabs (Modules, Artifacts, Specular, Summary).
+- **Architecture Analyzer Fix:** Strips `researchContext`/`researchMeta` before sending to LLM critic, preventing code/knowledge confusion.
+
+## 9. SPECULAR Protocol (v7)
+- **Layer 0 — SPECULAR AUDIT + FRONTEND CREATE:** AI visual drafts per blueprint node.
+  - PRIMARY: `gemini-3-pro-image-preview` (Nano Banana Pro)
+  - FALLBACK: `gemini-3.1-flash-image-preview` (Nano Banana 2)
+  - FALLBACK: Grok 4 Imagine (stack-local xAI)
+- **Layer 1 — Parsimônia:** Max 4-5 user moments, domain language only.
+- **Layer 2 — SSOT Flow:** Backend = truth, UIX + test = pure consumers.
+- **Layer 3 — Technical Parity:** Mirror test uses same SSE parser as UIX.
+- **SPECULAR MODE:** Agent autonomously tests → diagnoses → fixes → re-tests. UIX updated only when mirror passes.
+- **Mirror Test:** `tests/kompletus-e2e.ts` with SPECULAR assertions (moments, parity score, coverage).
 
 ## Tech Stack Summary
 | Layer | Technology |
 |---|---|
-| Frontend | React 19, Vite 6, Tailwind 4, Zustand 5, @xyflow/react 12, Three.js, Framer Motion |
+| Frontend | React 19, Vite 6, Tailwind 4, Zustand 5, @xyflow/react 12, Framer Motion |
 | Backend | Express 4, tsx, Node.js |
-| AI | OpenAI SDK 6 (xAI, OpenAI, Bridge) |
+| AI | xAI Grok, Google Gemini (key rotation), OpenAI, THE BRIDGE |
+| Pipeline | KOMPLETUS (8-stage), SPECULAR (UIX parity) |
 | Validation | Zod 4 |
 | Graph Engine | m1nd MCP (stdio child process) |
 | Research | Perplexity, Serper, Semantic Scholar, CrossRef, GitHub, Jina |
+| Testing | Mirror test (E2E SSE parser parity) |
 
-## 8. QA & Audit Status (v0.5.0)
-As of the latest release, the system has undergone a full Autonomous E2E Validation and an explicit `m1nd.audit(profile: production)`:
-- **Graph Integrity:** Connectivity (B), Duplication (A), Staleness (A).
-- **Core Stability:** The JSON extraction engine handles unstructured LLM reasoning blocks flawlessly via a depth-tracking parser.
-- **Identified Autonomous Limitations (Pending):**
-  - **OMX Scaffolding:** `plan.md` outputs lack "Phase 0" environment boots (e.g. `npm init`, `package.json`).
-  - **Cycle Handling:** The DAG can be hallucinated by the LLM into cyclic dependencies, requiring server-side guardrails.
+## 10. QA & Audit Status (v0.6.0)
+- **TypeScript Build:** 0 errors (`npx tsc --noEmit`).
+- **KOMPLETUS Pipeline:** Fully functional, tested with real prompts.
+- **SPECULAR Assertions:** Mirror test validates moments count, parity score, coverage.
+- **Architecture Analyzer:** Fixed — no longer confuses research data with system modules.
+- **Server:** Stable on port 3000 with 4 AI providers, m1nd MCP bridge, and full research engine.
+

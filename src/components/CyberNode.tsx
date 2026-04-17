@@ -128,6 +128,16 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
         </div>
       )}
 
+      {/* Grounded Badge — node has been enriched with research */}
+      {data.researchContext && (
+        <div className="px-3 py-1 border-t border-border-subtle bg-[rgba(0,242,255,0.04)] flex items-center justify-between">
+          <span className="text-[8px] uppercase text-accent/70 tracking-widest">🔬 Grounded</span>
+          {data.constructionNotes && (
+            <span className="text-[8px] font-mono text-[#b026ff]/70">📝</span>
+          )}
+        </div>
+      )}
+
       {/* Source Handle (Output) */}
       <Handle 
         type="source" 

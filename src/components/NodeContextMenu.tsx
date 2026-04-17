@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
+import { performDeepResearch } from '../lib/api';
 import { toast } from 'sonner';
-import { Trash2, Edit3, CheckCircle2, PlayCircle, Circle, Copy } from 'lucide-react';
+import { Trash2, Edit3, CheckCircle2, PlayCircle, Circle, Copy, Search, Layers } from 'lucide-react';
 
 interface ContextMenuProps {
   x: number;
@@ -12,9 +13,10 @@ interface ContextMenuProps {
 }
 
 export default function NodeContextMenu({ x, y, nodeId, nodeLabel, onClose }: ContextMenuProps) {
-  const { removeNode, updateNode, setSelectedNode, graphData } = useGraphStore();
+  const { removeNode, updateNode, setSelectedNode, graphData, selectedNodes, toggleNodeSelection, projectContext } = useGraphStore();
   const [isRenaming, setIsRenaming] = useState(false);
   const [newLabel, setNewLabel] = useState(nodeLabel);
+  const [isResearching, setIsResearching] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -73,7 +75,49 @@ export default function NodeContextMenu({ x, y, nodeId, nodeLabel, onClose }: Co
     onClose();
   };
 
+  const handleResearch = async () => {
+    const node = graphData.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    setIsResearching(true);
+    try {
+      const result = await performDeepResearch(node, projectContext);
+      updateNode(nodeId, { researchContext: result });
+      toast.success(`Research grounded to ${nodeLabel}`);
+    } catch (error) {
+      toast.error('Deep research failed');
+    } finally {
+      setIsResearching(false);
+      onClose();
+    }
+  };
+
+  const handleBatchResearch = async () => {
+    const nodeIds = Array.from(selectedNodes);
+    if (nodeIds.length === 0) return;
+    setIsResearching(true);
+    let done = 0;
+    for (const nid of nodeIds) {
+      const node = graphData.nodes.find(n => n.id === nid);
+      if (!node) continue;
+      try {
+        const result = await performDeepResearch(node, projectContext);
+        updateNode(nid, { researchContext: result });
+        done++;
+        toast.success(`[${done}/${nodeIds.length}] Grounded: ${node.label}`);
+      } catch {
+        toast.error(`Failed: ${node.label}`);
+      }
+    }
+    setIsResearching(false);
+    onClose();
+  };
+
+  const batchCount = selectedNodes.size;
+
   const menuItems = [
+    { icon: Search, label: isResearching ? 'Grounding...' : 'Deep Research', action: handleResearch, color: 'text-accent', disabled: isResearching },
+    ...(batchCount > 1 ? [{ icon: Layers, label: `Research Selected (${batchCount})`, action: handleBatchResearch, color: 'text-[#b026ff]', disabled: isResearching }] : []),
+    { divider: true },
     { icon: Edit3, label: 'Rename', action: () => setIsRenaming(true), color: 'text-accent' },
     { icon: Copy, label: 'Duplicate', action: handleDuplicate, color: 'text-text-dim' },
     { divider: true },
@@ -120,7 +164,8 @@ export default function NodeContextMenu({ x, y, nodeId, nodeLabel, onClose }: Co
             <button
               key={idx}
               onClick={item.action}
-              className={`w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-white/5 transition-colors cursor-pointer ${item.color}`}
+              disabled={(item as any).disabled}
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-white/5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${item.color}`}
             >
               {item.icon && <item.icon size={12} />}
               <span>{item.label}</span>

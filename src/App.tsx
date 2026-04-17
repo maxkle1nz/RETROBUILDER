@@ -13,6 +13,7 @@ import RightPanel from './components/RightPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import SessionLauncher from './components/SessionLauncher';
 import EnvConfigModal from './components/EnvConfigModal';
+import KompletusReport from './components/KompletusReport';
 import { useGraphStore } from './store/useGraphStore';
 import { fetchEnvConfig, listSessions, loadSession, registerModelGetter, saveSession } from './lib/api';
 import { BrainCircuit, FolderOpen, KeyRound, PenTool, PanelRightClose, PanelLeftClose, Save, Hammer } from 'lucide-react';
@@ -421,6 +422,7 @@ export default function App() {
         <ChatFooter />
         <SessionLauncher />
         <EnvConfigModal />
+        <KompletusReport />
       </div>
     </ErrorBoundary>
   );

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
-import { activateSessionDraft, generateGraphStructure, generateProposal, applyProposal } from '../lib/api';
+import { activateSessionDraft, generateGraphStructure, generateProposal, applyProposal, runKompletus } from '../lib/api';
 import { m1nd } from '../lib/m1nd';
-import { Send, Loader2, Terminal, Check, X, BrainCircuit, Download, Upload, Trash2, Zap } from 'lucide-react';
+import { Send, Loader2, Terminal, Check, X, BrainCircuit, Download, Upload, Trash2, Zap, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import ModelSelector from './ModelSelector';
 
@@ -33,6 +33,11 @@ export default function ChatFooter() {
     appMode,
     importMeta,
     openSessionLauncher,
+    isKompletusRunning,
+    setKompletusRunning,
+    addKompletusProgress,
+    clearKompletusProgress,
+    openKompletusReport,
   } = useGraphStore();
   const [prompt, setPrompt] = useState('');
   const [m1ndOnline, setM1ndOnline] = useState(false);
@@ -119,8 +124,19 @@ export default function ChatFooter() {
         setGraphData(systemState.graph);
         setManifesto(systemState.manifesto);
         setArchitecture(systemState.architecture);
-        addMessage('system', `✓ Generated ${systemState.graph.nodes.length} nodes, ${systemState.graph.links.length} edges`);
-        toast.success(`Skeleton generated: ${systemState.graph.nodes.length} modules`);
+        const explanation = systemState.explanation?.trim();
+        const selfCorrected = systemState.meta?.selfCorrected;
+        const pass1Issues = systemState.meta?.pass1Issues || 0;
+        if (explanation) {
+          addMessage('system', explanation);
+        } else {
+          addMessage('system', `✓ Generated ${systemState.graph.nodes.length} nodes, ${systemState.graph.links.length} edges. Select modules and run Deep Research to ground them.`);
+        }
+        if (selfCorrected) {
+          const enhanced = systemState.meta?.enhancedNodes || 0;
+          addMessage('system', `🔁 Hardened by Critic+Dreamer — ${pass1Issues} issue(s) resolved, architecture enhanced to ${enhanced} modules with full error handling, contracts, and compliance.`);
+        }
+        toast.success(`Skeleton generated: ${systemState.graph.nodes.length} modules${selfCorrected ? ' (self-corrected)' : ''}`);
       } else {
         const proposalText = await generateProposal(currentPrompt, graphData, manifesto);
         setPendingProposal({ text: proposalText, prompt: currentPrompt });
@@ -134,6 +150,44 @@ export default function ChatFooter() {
       toast.error('Generation failed', { description: msg });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleKompletus = async () => {
+    if (!prompt.trim()) {
+      toast.warning('Describe the system you want to build');
+      return;
+    }
+    if (!activeSessionId) {
+      openSessionLauncher();
+      toast.info('Create or load a session first');
+      return;
+    }
+    const currentPrompt = prompt;
+    setPrompt('');
+    addMessage('user', `⚡ KOMPLETUS: ${currentPrompt}`);
+    setShowHistory(true);
+    setKompletusRunning(true);
+    clearKompletusProgress();
+
+    try {
+      addMessage('system', '⚡ KOMPLETUS pipeline started — generating, researching, validating...');
+      const result = await runKompletus(currentPrompt, (event) => {
+        addKompletusProgress(event);
+        if (event.message) {
+          addMessage('system', `  ${event.message}`);
+        }
+      });
+      openKompletusReport(result);
+      addMessage('system', `✓ KOMPLETUS complete: ${result.graph.nodes.length} modules, ${Object.keys(result.research).length} researched. Report ready.`);
+      toast.success('KOMPLETUS report ready for review');
+    } catch (error) {
+      console.error('[KOMPLETUS] Error:', error);
+      const msg = error instanceof Error ? error.message : 'Pipeline failed';
+      addMessage('system', `✗ KOMPLETUS error: ${msg}`);
+      toast.error('KOMPLETUS failed', { description: msg });
+    } finally {
+      setKompletusRunning(false);
     }
   };
 
@@ -328,8 +382,19 @@ export default function ChatFooter() {
                   : 'bg-accent-dim text-accent hover:bg-accent hover:text-bg'
             }`}
           >
-            {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {isGenerating || isKompletusRunning ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           </button>
+          {/* KOMPLETUS quick-launch */}
+          {mode === 'KONSTRUKTOR' && !isKompletusRunning && (
+            <button
+              onClick={handleKompletus}
+              disabled={isGenerating || !prompt.trim()}
+              className="absolute bottom-3 right-12 p-1.5 disabled:opacity-30 rounded transition-colors cursor-pointer bg-[#ff79c6]/15 text-[#ff79c6] hover:bg-[#ff79c6] hover:text-bg"
+              title="KOMPLETUS: Full pipeline with deep research + validation"
+            >
+              <Sparkles size={14} />
+            </button>
+          )}
         </div>
         
         <div className="w-[240px] border-l border-border-subtle pl-5 flex flex-col justify-center">

@@ -4,7 +4,12 @@ interface GraphNode {
   id: string;
   label: string;
   type?: string;
+  description?: string;
   dependencies?: string[];
+  researchContext?: string;
+  constructionNotes?: string;
+  acceptance_criteria?: string[];
+  data_contract?: string;
 }
 
 interface SessionGraph {
@@ -79,7 +84,20 @@ export async function runOMXSimulation(
     if (res.writableEnded) break;
 
     const phases: Array<'scaffold' | 'implement' | 'test' | 'integrate'> = ['scaffold', 'implement', 'test', 'integrate'];
-    emit(res, { type: 'node_start', nodeId: node.id, phase: phases[0] });
+    const isGrounded = !!(node.researchContext || node.constructionNotes);
+    emit(res, {
+      type: 'node_start',
+      nodeId: node.id,
+      phase: phases[0],
+      grounded: isGrounded,
+      ...(isGrounded && {
+        enrichment: {
+          hasResearch: !!node.researchContext,
+          hasNotes: !!node.constructionNotes,
+          acceptanceCriteria: node.acceptance_criteria?.length ?? 0,
+        },
+      }),
+    });
 
     for (let phaseIdx = 0; phaseIdx < phases.length; phaseIdx++) {
       const phase = phases[phaseIdx];

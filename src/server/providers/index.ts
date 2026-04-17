@@ -5,7 +5,7 @@
  * Each provider implements the same contract — swap backends
  * by changing AI_PROVIDER env var or at runtime via API.
  * 
- * Supported: xai, openai, bridge
+ * Supported: xai, openai, gemini, bridge
  */
 
 export interface ChatMessage {
@@ -50,10 +50,12 @@ export interface AIProvider {
 import { createXAIProvider } from './xai.js';
 import { createOpenAIProvider } from './openai.js';
 import { createBridgeProvider } from './bridge.js';
+import { createGeminiProvider } from './gemini.js';
 
 export const PROVIDER_FACTORIES: Record<string, () => AIProvider> = {
   xai: createXAIProvider,
   openai: createOpenAIProvider,
+  gemini: createGeminiProvider,
   bridge: createBridgeProvider,
 };
 

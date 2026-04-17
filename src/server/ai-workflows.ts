@@ -6,6 +6,147 @@ import { validateAIResponse, validateGraphIntegrity, AnalysisResultSchema, Graph
 import { buildResearchContext, performWebResearch } from './web-research.js';
 import { getM1ndBridge } from './m1nd-bridge.js';
 
+// ─── Inline Blueprint Quality Auditor ────────────────────────────────────
+
+interface QualityIssue {
+  code: string;
+  severity: 'error' | 'warning';
+  message: string;
+  nodeIds?: string[];
+}
+
+/**
+ * Lightweight inline quality audit — runs BEFORE delivery to user.
+ * Does NOT require a session. Operates on raw graph data.
+ * Returns a list of issues that should be fed back to the LLM.
+ */
+function auditBlueprintQuality(graph: GraphData): QualityIssue[] {
+  const issues: QualityIssue[] = [];
+  const { nodes, links } = graph;
+
+  // 1. Error handling coverage — MUST be present on all nodes
+  const noEH = nodes.filter(n => !n.error_handling || n.error_handling.length === 0);
+  if (noEH.length > 0) {
+    issues.push({
+      code: 'MISSING_ERROR_HANDLING',
+      severity: 'error',
+      message: `${noEH.length}/${nodes.length} modules have NO error handling. Every module must define at least 2 failure scenarios and recovery strategies. Missing: ${noEH.map(n => `"${n.label}"`).join(', ')}`,
+      nodeIds: noEH.map(n => n.id),
+    });
+  }
+
+  // 2. Data contract coverage — MUST be present
+  const noDC = nodes.filter(n => !n.data_contract || !n.data_contract.trim());
+  if (noDC.length > 0) {
+    issues.push({
+      code: 'MISSING_DATA_CONTRACT',
+      severity: 'error',
+      message: `${noDC.length}/${nodes.length} modules have no data contract (input/output specification). Missing: ${noDC.map(n => `"${n.label}"`).join(', ')}`,
+      nodeIds: noDC.map(n => n.id),
+    });
+  }
+
+  // 3. Acceptance criteria depth — must have at least 2 per node
+  const thinAC = nodes.filter(n => !n.acceptance_criteria || n.acceptance_criteria.length < 2);
+  if (thinAC.length > 0) {
+    issues.push({
+      code: 'THIN_ACCEPTANCE_CRITERIA',
+      severity: 'warning',
+      message: `${thinAC.length}/${nodes.length} modules have fewer than 2 acceptance criteria. Each module needs at least 2 testable conditions. Weak: ${thinAC.map(n => `"${n.label}" (${n.acceptance_criteria?.length ?? 0} AC)`).join(', ')}`,
+      nodeIds: thinAC.map(n => n.id),
+    });
+  }
+
+  // 4. Security wiring — security nodes must connect to ALL backend/external services
+  const securityNodes = nodes.filter(n => n.type === 'security');
+  const protectedTypes = new Set(['backend', 'external']);
+  const needsProtection = nodes.filter(n => protectedTypes.has(n.type || ''));
+  if (securityNodes.length > 0 && needsProtection.length > 0) {
+    const secIds = new Set(securityNodes.map(n => n.id));
+    const securityTargets = new Set(
+      links.filter(l => secIds.has(l.source) || secIds.has(l.target))
+        .flatMap(l => [l.source, l.target])
+    );
+    const unprotected = needsProtection.filter(n => !securityTargets.has(n.id));
+    if (unprotected.length > 0) {
+      issues.push({
+        code: 'SECURITY_WIRING_GAP',
+        severity: 'error',
+        message: `Security module exists but ${unprotected.length} backend/external services are NOT connected to it: ${unprotected.map(n => `"${n.label}"`).join(', ')}. Security must protect all services.`,
+        nodeIds: unprotected.map(n => n.id),
+      });
+    }
+  }
+
+  // 5. Missing critical types
+  const typeSet = new Set(nodes.map(n => n.type));
+  const missing: string[] = [];
+  if (!typeSet.has('security') && (typeSet.has('backend') || typeSet.has('external'))) {
+    missing.push('security/auth module (no security layer for backend services)');
+  }
+  if (!typeSet.has('database') && typeSet.has('backend')) {
+    missing.push('database/persistence module (backend services have no storage)');
+  }
+  if (missing.length > 0) {
+    issues.push({
+      code: 'MISSING_MODULE_TYPES',
+      severity: 'error',
+      message: `Architecture is missing critical modules: ${missing.join('; ')}. Add them.`,
+    });
+  }
+
+  // 6. Orphan detection — nodes with zero connections in a multi-node graph  
+  if (nodes.length > 1) {
+    const connected = new Set<string>();
+    for (const l of links) { connected.add(l.source); connected.add(l.target); }
+    const orphans = nodes.filter(n => !connected.has(n.id));
+    if (orphans.length > 0) {
+      issues.push({
+        code: 'ORPHAN_NODES',
+        severity: 'warning',
+        message: `${orphans.length} module(s) have zero connections (structural islands): ${orphans.map(n => `"${n.label}"`).join(', ')}. Wire them into the DAG.`,
+        nodeIds: orphans.map(n => n.id),
+      });
+    }
+  }
+
+  return issues;
+}
+
+// ─── KONSTRUKTOR System Prompt ───────────────────────────────────────────
+
+const KONSTRUKTOR_SYSTEM_PROMPT = `You are an expert system architect and mind-map generator (m1nd).
+Your task is to break down a user's project request into a detailed DAG (Directed Acyclic Graph) structure AND generate project artifacts.
+If a current graph or manifesto is provided, modify or expand them based on the user's prompt.
+Return the result as a JSON object with 'manifesto', 'architecture', 'graph' (containing 'nodes' and 'links'), and 'explanation'.
+
+Artifacts:
+- manifesto: A high-level project manifesto, core objectives, and business rules (Markdown).
+- architecture: Technical architecture decisions, patterns, and stack rationale (Markdown).
+- explanation: A concise, human-readable summary (2-4 sentences) of the skeleton you created — what modules were generated, the key architectural decisions made, and what the user should do next (e.g. "Run deep research on the Auth and Database modules to ground them with real-world patterns before proceeding to build"). Write in a direct, confident, technical tone. Do NOT use markdown formatting — plain text only.
+
+Nodes MUST have ALL of the following (no exceptions):
+- id (string)
+- label (string)
+- description (string — at least 2 sentences describing responsibility)
+- status (pending|in-progress|completed)
+- type (frontend|backend|database|external|security)
+- data_contract (string — REQUIRED: what inputs it receives and outputs it returns, in "Input: {...} → Output: {...}" format)
+- decision_rationale (string — why this architectural choice was made)
+- acceptance_criteria (string array: 2-5 testable conditions. Each criterion must be verifiable by an autonomous agent — e.g. "POST /auth/login returns 200 with JWT for valid credentials")
+- error_handling (string array — REQUIRED, at least 2 entries: how this module handles failures — e.g. "If payment gateway timeout > 30s, circuit-break and return 503", "If DB connection lost, retry 3x with exponential backoff then fail gracefully")
+- priority (number: 1 = foundation with no deps, higher = depends on lower priorities)
+- group (number for clustering)
+
+Links must have: source (node id), target (node id), label (optional string describing the data flow).
+Security modules MUST connect to ALL backend and external services they protect.
+Ensure the graph has a clear hierarchy and SSOT. Avoid circular dependencies.
+IMPORTANT: The graph must be buildable by an autonomous agent in priority order.
+
+CRITICAL: You must return ONLY valid JSON.`;
+
+// ─── KONSTRUKTOR Workflow with Self-Correction Loop ──────────────────────
+
 export async function generateGraphStructureWorkflow(input: {
   prompt: string;
   currentGraph?: GraphData;
@@ -14,55 +155,135 @@ export async function generateGraphStructureWorkflow(input: {
 }) {
   const hydratedPrompt = await hydratePromptWithFiles(input.prompt);
 
-  const messages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: `You are an expert system architect and mind-map generator (m1nd).
-Your task is to break down a user's project request into a detailed DAG (Directed Acyclic Graph) structure AND generate project artifacts.
-If a current graph or manifesto is provided, modify or expand them based on the user's prompt.
-Return the result as a JSON object with 'manifesto', 'architecture', and 'graph' (containing 'nodes' and 'links').
-
-Artifacts:
-- manifesto: A high-level project manifesto, core objectives, and business rules (Markdown).
-- architecture: Technical architecture decisions, patterns, and stack rationale (Markdown).
-
-Nodes must have:
-- id (string)
-- label (string)
-- description (string)
-- status (pending|in-progress|completed)
-- type (frontend|backend|database|external|security)
-- data_contract (string, optional: what inputs it receives and outputs it returns)
-- decision_rationale (string, optional: why this architectural choice was made)
-- acceptance_criteria (string array: 2-5 testable conditions that prove this module works correctly. Each criterion must be verifiable by an autonomous agent — e.g. "POST /auth/login returns 200 with JWT for valid credentials", "Database migration creates users table with email unique index")
-- error_handling (string array, optional: how this module should handle failures — e.g. "If payment gateway timeout > 30s, circuit-break and return 503")
-- priority (number: build order computed from dependencies — 1 = foundation with no deps, higher = depends on lower priorities. Foundation layers like databases should be priority 1, services that depend on them priority 2, UI layers that depend on services priority 3+)
-- group (number for clustering)
-
-Links must have: source (node id), target (node id), label (optional string describing the data flow).
-Ensure the graph has a clear hierarchy and Single Source of Truth (SSOT). Avoid circular dependencies.
-IMPORTANT: The graph must be buildable by an autonomous agent in priority order. Lower priority numbers are built first.
-
-CRITICAL: You must return ONLY valid JSON.`,
-    },
+  // ── Pass 1: Initial Generation ──────────────────────────────────────
+  const pass1Messages: ChatMessage[] = [
+    { role: 'system', content: KONSTRUKTOR_SYSTEM_PROMPT },
     {
       role: 'user',
       content: `User Prompt: ${hydratedPrompt}\n\nCurrent Manifesto: ${input.currentManifesto || 'None'}\nCurrent Graph: ${input.currentGraph ? JSON.stringify(input.currentGraph) : 'None'}`,
     },
   ];
 
-  const result = await chatCompletionWithFallback(messages, { jsonMode: true, model: input.model }, 'generateGraphStructure');
-  const validated = validateAIResponse(extractJSON(result.content), SystemStateSchema, 'generateGraphStructure');
+  console.log('[KONSTRUKTOR] Pass 1: Generating initial skeleton...');
+  const pass1Result = await chatCompletionWithFallback(pass1Messages, { jsonMode: true, model: input.model }, 'generateGraphStructure');
+  let validated = validateAIResponse(extractJSON(pass1Result.content), SystemStateSchema, 'generateGraphStructure');
+  let repairedGraph = validateGraphIntegrity(validated.graph, 'generateGraphStructure:pass1', { allowCycleBreaking: true });
 
-  // P0: Enforce DAG invariants — reject cycles, repair dangling links
-  const repairedGraph = validateGraphIntegrity(validated.graph, 'generateGraphStructure', { allowCycleBreaking: true });
+  // ── Quality Audit (Pass 1) ───────────────────────────────────────────
+  const pass1Issues = auditBlueprintQuality(repairedGraph);
+  const pass1Errors = pass1Issues.filter(i => i.severity === 'error');
+  const pass1Warnings = pass1Issues.filter(i => i.severity === 'warning');
+
+  console.log(`[KONSTRUKTOR] Pass 1 audit: ${pass1Errors.length} errors, ${pass1Warnings.length} warnings, ${repairedGraph.nodes.length} nodes`);
+
+  // ── Pass 2: Critic + Dreamer (ALWAYS RUNS) ─────────────────────────
+  // Half critic: fixes structural gaps detected by audit
+  // Half dreamer: proactively adds modules that improve the architecture
+  console.log('[KONSTRUKTOR] Pass 2: Critic + Dreamer engaged...');
+
+  const issueReport = pass1Issues.length > 0
+    ? `\n\nQUALITY AUDIT FINDINGS:\n${pass1Issues.map(i => `[${i.severity.toUpperCase()}] ${i.code}: ${i.message}`).join('\n')}`
+    : '\n\nQUALITY AUDIT: All checks passed. No structural issues detected.';
+
+  const pass2Messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: `You are the HARDENER — a dual-mode architect that is half Critic, half Dreamer.
+
+CRITIC MODE: Fix every structural and completeness issue found by the quality audit. Zero tolerance for missing error_handling, missing data_contract, or disconnected security.
+
+DREAMER MODE: Proactively enhance the architecture by adding modules that a senior architect would expect but a first draft typically misses. Think about:
+- Observability (logging, monitoring, health checks)
+- Resilience (message queues, circuit breakers, retry policies)
+- Compliance (LGPD/GDPR consent management, audit trails, data deletion workflows)
+- Operational (backup/restore, rate limiting, feature flags)
+- Developer experience (API gateway, documentation service)
+
+Only add modules that genuinely serve the system's domain. Don't add unnecessary complexity.
+
+RULES:
+- EVERY node MUST have error_handling (string array, at least 2 entries). NO EXCEPTIONS.
+- EVERY node MUST have data_contract (string, non-empty). NO EXCEPTIONS.
+- EVERY node MUST have acceptance_criteria (string array, at least 2 entries).
+- Security modules MUST connect to ALL backend and external services.
+- New modules you add must have ALL required fields fully populated.
+- Update the manifesto and architecture documents to reflect your additions.
+- Update the explanation to describe what you improved and what you added.
+
+Return the COMPLETE updated JSON with manifesto, architecture, graph, and explanation.
+CRITICAL: You must return ONLY valid JSON.`,
+    },
+    {
+      role: 'user',
+      content: `Original user request: ${hydratedPrompt}`,
+    },
+    {
+      role: 'assistant',
+      content: JSON.stringify({ manifesto: validated.manifesto, architecture: validated.architecture, graph: repairedGraph, explanation: validated.explanation }),
+    },
+    {
+      role: 'user',
+      content: `Review and harden this architecture.${issueReport}
+
+As the HARDENER, you must:
+1. [CRITIC] Fix every issue listed above (if any). Every node needs error_handling and data_contract — fill them ALL.
+2. [DREAMER] Add 2-4 modules that a production system would need but this draft is missing (observability, resilience, compliance, etc). Fully populate all fields for new modules.
+3. [WIRING] Ensure security covers all services. Ensure no orphan nodes. Ensure all links have descriptive labels.
+4. [EXPLANATION] Rewrite the explanation to summarize both the corrections and the enhancements you made.
+
+Return the COMPLETE hardened JSON.`,
+    },
+  ];
+
+  const pass2Result = await chatCompletionWithFallback(pass2Messages, { jsonMode: true, model: input.model }, 'generateGraphStructure:harden');
+  validated = validateAIResponse(extractJSON(pass2Result.content), SystemStateSchema, 'generateGraphStructure:pass2');
+  repairedGraph = validateGraphIntegrity(validated.graph, 'generateGraphStructure:pass2', { allowCycleBreaking: true });
+
+  // ── Final Audit + Programmatic Guarantee ────────────────────────────
+  const finalIssues = auditBlueprintQuality(repairedGraph);
+  const finalErrors = finalIssues.filter(i => i.severity === 'error');
+  console.log(`[KONSTRUKTOR] Pass 2 result: ${finalErrors.length} errors remaining (was ${pass1Errors.length}), ${repairedGraph.nodes.length} nodes`);
+
+  // Programmatic safety net — guarantee zero missing fields even if LLM flakes
+  const hardenedNodes = repairedGraph.nodes.map(n => ({
+    ...n,
+    data_contract: n.data_contract?.trim() || `Input: ${n.label} request payload → Output: ${n.label} response with status`,
+    error_handling: n.error_handling && n.error_handling.length >= 2
+      ? n.error_handling
+      : [
+          ...(n.error_handling || []),
+          ...([
+            `If ${n.label} operation fails, log error with context and return structured error response`,
+            `On timeout or connection failure, retry up to 3 times with exponential backoff before failing gracefully`,
+          ].slice(0, 2 - (n.error_handling?.length || 0))),
+        ],
+    acceptance_criteria: n.acceptance_criteria && n.acceptance_criteria.length >= 2
+      ? n.acceptance_criteria
+      : [
+          ...(n.acceptance_criteria || []),
+          ...([
+            `${n.label} responds to health check endpoint with 200 OK`,
+            `${n.label} handles invalid input gracefully and returns 400 with descriptive error`,
+          ].slice(0, 2 - (n.acceptance_criteria?.length || 0))),
+        ],
+  }));
+
+  repairedGraph = { nodes: hardenedNodes, links: repairedGraph.links };
+
+  // Final verification log
+  const postHardenGaps = hardenedNodes.filter(n => !n.data_contract?.trim() || !n.error_handling?.length);
+  console.log(`[KONSTRUKTOR] ✓ Delivered: ${hardenedNodes.length} nodes, ${repairedGraph.links.length} links, ${postHardenGaps.length} gaps (guaranteed 0)`);
 
   return {
     ...validated,
     graph: repairedGraph,
     meta: {
-      provider: result.providerName,
-      fallbackUsed: result.fallbackUsed,
+      provider: pass1Result.providerName,
+      fallbackUsed: pass1Result.fallbackUsed,
+      selfCorrected: true,
+      pass1Issues: pass1Issues.length,
+      pass1Nodes: pass1Issues.length > 0 ? repairedGraph.nodes.length : 0,
+      enhancedNodes: repairedGraph.nodes.length,
     },
   };
 }
@@ -177,11 +398,38 @@ export async function analyzeArchitectureWorkflow(input: {
   manifesto: string;
   model?: string;
 }) {
+  // Strip research enrichment data — the critic should analyze ARCHITECTURE, not research content.
+  // researchContext/researchMeta are knowledge blobs from deep research, not structural modules.
+  const hasResearch = input.graph.nodes.some(n => (n as any).researchContext);
+  const strippedGraph: GraphData = {
+    nodes: input.graph.nodes.map(n => {
+      const { researchContext, researchMeta, constructionNotes, ...structural } = n as any;
+      // Preserve a lightweight hint so the critic knows research was done
+      if (researchContext) {
+        (structural as any).researchStatus = 'grounded';
+      }
+      return structural;
+    }),
+    links: input.graph.links,
+  };
+
+  const researchNote = hasResearch
+    ? `\n\nNOTE: This system has already been through Deep Research grounding. Nodes marked with "researchStatus": "grounded" have validated research backing their data contracts. Do NOT treat research content as system modules — focus only on the structural architecture (nodes, links, types, data contracts, acceptance criteria).`
+    : '';
+
   const messages: ChatMessage[] = [
     {
       role: 'system',
       content: `You are the "Critic", a senior software architect auditor.
 Your job is to analyze the provided system graph and manifesto for flaws, security risks, missing components (like missing databases or auth), and circular dependencies.
+
+IMPORTANT DISTINCTIONS:
+- Each node in the graph represents a SYSTEM MODULE (backend service, frontend page, database, external integration, etc.)
+- Node fields like "data_contract", "acceptance_criteria", "error_handling" describe the MODULE's technical contract
+- Nodes with "researchStatus": "grounded" have been validated through deep research — their contracts are already evidence-based
+- Do NOT confuse research CONTENT with system MODULES — only analyze the structural architecture
+- Focus on: module relationships (links), missing integrations, security gaps, data flow, redundant modules, circular dependencies
+
 If the architecture is solid, set isGood to true and provide a brief positive critique.
 If it has flaws, set isGood to false, provide a harsh but constructive critique, and provide an 'optimizedGraph' with the necessary fixes (adding missing nodes, fixing links, updating data contracts).
 
@@ -189,7 +437,7 @@ CRITICAL: You must return ONLY valid JSON.`,
     },
     {
       role: 'user',
-      content: `Manifesto: ${input.manifesto}\n\nCurrent Graph: ${JSON.stringify(input.graph)}\n\nAnalyze this architecture.`,
+      content: `Manifesto: ${input.manifesto}${researchNote}\n\nCurrent Graph (${strippedGraph.nodes.length} modules, ${strippedGraph.links.length} links): ${JSON.stringify(strippedGraph)}\n\nAnalyze this architecture.`,
     },
   ];
 

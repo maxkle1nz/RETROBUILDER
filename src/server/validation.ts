@@ -56,6 +56,8 @@ export const NodeDataSchema = z.object({
   error_handling: stringArrayish.optional(),
   priority: safeNumber,
   group: safeNumber.default(0),
+  researchContext: z.string().optional(),
+  constructionNotes: z.string().optional(),
 });
 
 export const LinkDataSchema = z.object({
@@ -113,6 +115,7 @@ export const SystemStateSchema = z.object({
   manifesto: stringish.default(''),
   architecture: stringish.default(''),
   graph: GraphDataSchema,
+  explanation: z.string().optional().default(''),
 });
 
 export const AnalysisResultSchema = z.object({

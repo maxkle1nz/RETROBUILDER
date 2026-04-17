@@ -51,12 +51,22 @@ export default function RightPanel() {
     manifesto,
     architecture,
     projectContext,
+    updateNode,
   } = useGraphStore();
   const [tab, setTab] = useState<PanelTab>('ready');
   const [readiness, setReadiness] = useState<BlueprintReadinessReport | null>(null);
   const [impact, setImpact] = useState<BlueprintImpactReport | null>(null);
   const [gaps, setGaps] = useState<BlueprintGapReport | null>(null);
   const [researchResult, setResearchResult] = useState<string | null>(null);
+
+  // Sync researchResult from node's persisted data when selection changes
+  useEffect(() => {
+    if (selectedNode?.researchContext) {
+      setResearchResult(selectedNode.researchContext);
+    } else {
+      setResearchResult(null);
+    }
+  }, [selectedNode?.id, selectedNode?.researchContext]);
   const [advancedData, setAdvancedData] = useState<SessionAdvancedReport | null>(null);
   const [advancedAction, setAdvancedAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -465,8 +475,24 @@ export default function RightPanel() {
           {loading ? 'Grounding...' : 'Run Grounding & Research'}
         </button>
         {researchResult && (
-          <div className="bg-black/40 border border-border-subtle rounded p-3 prose prose-invert prose-sm max-w-none prose-a:text-accent prose-headings:text-text-main">
-            <ReactMarkdown>{researchResult}</ReactMarkdown>
+          <div className="space-y-2">
+            <div className="bg-black/40 border border-border-subtle rounded p-3 prose prose-invert prose-sm max-w-none prose-a:text-accent prose-headings:text-text-main">
+              <ReactMarkdown>{researchResult}</ReactMarkdown>
+            </div>
+            {selectedNode && researchResult !== selectedNode.researchContext && (
+              <button
+                onClick={() => {
+                  updateNode(selectedNode.id, { researchContext: researchResult });
+                  toast.success(`Research saved to ${selectedNode.label}`);
+                }}
+                className="w-full py-2 bg-[#50fa7b]/10 border border-[#50fa7b]/30 hover:bg-[#50fa7b]/20 text-[#50fa7b] rounded text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+              >
+                💾 Save Research to Node
+              </button>
+            )}
+            {selectedNode?.researchContext === researchResult && (
+              <div className="text-[10px] text-[#50fa7b]/60 text-center uppercase tracking-widest">✓ Saved to node</div>
+            )}
           </div>
         )}
       </div>
