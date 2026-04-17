@@ -117,9 +117,9 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
           </h3>
           {data.description && (
             <div className="mt-1.5 p-1.5 bg-black/20 rounded-[6px] border border-white/5">
-               <p className="text-[10.5px] text-text-dim leading-[1.5] max-h-[58px] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                 {data.description}
-               </p>
+              <p className="text-[10.5px] text-text-dim leading-[1.5]">
+                {data.description}
+              </p>
             </div>
           )}
         </div>
