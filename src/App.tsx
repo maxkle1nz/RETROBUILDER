@@ -16,6 +16,7 @@ import EnvConfigModal from './components/EnvConfigModal';
 import KompletusReport from './components/KompletusReport';
 import BuildConsole from './components/BuildConsole';
 import SpotlightSearch from './components/SpotlightSearch';
+import NodeInspector from './components/NodeInspector';
 import { useGraphStore } from './store/useGraphStore';
 import { useBuildStore } from './store/useBuildStore';
 import { fetchEnvConfig, listSessions, loadSession, registerModelGetter, saveSession } from './lib/api';
@@ -454,6 +455,7 @@ export default function App() {
         <SessionLauncher />
         <EnvConfigModal />
         <KompletusReport />
+        <NodeInspector />
 
         {/* Spotlight Search (portalled over everything) */}
         <AnimatePresence>

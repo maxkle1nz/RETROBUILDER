@@ -103,6 +103,11 @@ interface GraphState {
   addKompletusProgress: (event: KompletusEvent) => void;
   clearKompletusProgress: () => void;
   updateKompletusNode: (nodeId: string, updates: Partial<NodeData>) => void;
+
+  // Node Inspector
+  inspectorNodeId: string | null;
+  openInspector: (nodeId: string) => void;
+  closeInspector: () => void;
 }
 
 export const useGraphStore = create<GraphState>()(
@@ -138,6 +143,7 @@ export const useGraphStore = create<GraphState>()(
         kompletusResult: null,
         kompletusProgress: [],
         isKompletusRunning: false,
+        inspectorNodeId: null,
         setGraphData: (data) => set((state) => ({
           graphData: data,
           sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
@@ -287,6 +293,8 @@ export const useGraphStore = create<GraphState>()(
             },
           };
         }),
+        openInspector: (nodeId) => set({ inspectorNodeId: nodeId }),
+        closeInspector: () => set({ inspectorNodeId: null }),
       }),
       {
         partialize: (state) => ({
