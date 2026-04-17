@@ -176,7 +176,14 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
               </div>
             ) : (
               /* ── Read mode ── */
-              <div className="relative p-1.5 bg-black/20 rounded-[6px] border border-white/5 group-hover:border-white/10 transition-colors">
+              <div
+                className="relative p-1.5 bg-black/20 rounded-[6px] border border-white/5 group-hover:border-white/10 transition-colors cursor-text"
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditText(data.description ?? '');
+                  setEditing(true);
+                }}
+              >
                 <p className="text-[10.5px] text-text-dim leading-[1.5] pr-5">
                   {data.description || <span className="italic opacity-40">No description</span>}
                 </p>
@@ -188,7 +195,7 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
                     setEditing(true);
                   }}
                   className="absolute top-1 right-1 p-0.5 rounded opacity-0 group-hover:opacity-100 text-text-dim hover:text-accent hover:bg-accent/10 transition-all"
-                  title="Edit description"
+                  title="Edit description (or double-click)"
                 >
                   <Pencil size={10} />
                 </button>
