@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { createEphemeralSession, resolveSessionPayload } from '../session-payload.js';
 import { analyzeSessionReadiness } from '../session-analysis.js';
 import { loadSession, type SessionDocument } from '../session-store.js';
+import { computeTopology } from '../session-topology.js';
 import { runOMXSimulation } from '../omx-runner.js';
 
 export function createOmxRouter() {
@@ -10,10 +11,8 @@ export function createOmxRouter() {
   router.get('/api/omx/stream/:sessionId', async (req, res) => {
     const { sessionId } = req.params;
 
-    let session;
-    try {
-      session = await loadSession(sessionId);
-    } catch {
+    const session = await loadSession(sessionId);
+    if (!session) {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
@@ -70,45 +69,14 @@ export function createOmxRouter() {
           });
         }
 
+        const topology = computeTopology(sourceSession.graph);
         const nodes = [...sourceSession.graph.nodes];
         const links = sourceSession.graph.links || [];
-
-        const inDegree = new Map<string, number>();
-        const dependents = new Map<string, string[]>();
-        for (const n of nodes) {
-          inDegree.set(n.id, 0);
-          dependents.set(n.id, []);
-        }
-        for (const l of links) {
-          inDegree.set(l.target, (inDegree.get(l.target) || 0) + 1);
-          if (!dependents.has(l.source)) dependents.set(l.source, []);
-          dependents.get(l.source)!.push(l.target);
-        }
-
-        const queue: string[] = [];
-        const order = new Map<string, number>();
-        for (const [id, deg] of inDegree) {
-          if (deg === 0) queue.push(id);
-        }
-
-        let level = 1;
-        while (queue.length > 0) {
-          const batch = [...queue];
-          queue.length = 0;
-          for (const id of batch) {
-            order.set(id, level);
-            for (const dep of dependents.get(id) || []) {
-              const newDeg = (inDegree.get(dep) || 1) - 1;
-              inDegree.set(dep, newDeg);
-              if (newDeg === 0) queue.push(dep);
-            }
-          }
-          level++;
-        }
+        const computedPriorities = new Map(topology.buildOrder.map((entry) => [entry.id, entry.priority]));
 
         for (const n of nodes) {
           if (!n.priority) {
-            n.priority = order.get(n.id) || 1;
+            n.priority = computedPriorities.get(n.id) || 1;
           }
         }
 
