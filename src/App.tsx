@@ -14,7 +14,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import SessionLauncher from './components/SessionLauncher';
 import EnvConfigModal from './components/EnvConfigModal';
 import KompletusReport from './components/KompletusReport';
-import OmxTerminalDrawer from './components/OmxTerminalDrawer';
+import BuildConsole from './components/BuildConsole';
 import SpotlightSearch from './components/SpotlightSearch';
 import { useGraphStore } from './store/useGraphStore';
 import { useBuildStore } from './store/useBuildStore';
@@ -449,7 +449,7 @@ export default function App() {
           </AnimatePresence>
         </div>
 
-        <OmxTerminalDrawer open={terminalOpen} onClose={() => setTerminalOpen(false)} />
+        <BuildConsole drawerMode open={terminalOpen} onClose={() => setTerminalOpen(false)} />
         <ChatFooter />
         <SessionLauncher />
         <EnvConfigModal />

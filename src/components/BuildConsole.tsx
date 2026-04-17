@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBuildStore, type BuildLogEntry } from '../store/useBuildStore';
-import { Terminal, CheckCircle2, AlertCircle, ArrowRight, Cpu } from 'lucide-react';
+import { Terminal, CheckCircle2, AlertCircle, ArrowRight, Cpu, ChevronDown } from 'lucide-react';
 
 const LOG_ICON: Record<BuildLogEntry['type'], React.ComponentType<{ size?: number; className?: string }>> = {
   system:  Cpu,
@@ -19,7 +19,11 @@ const LOG_COLOR: Record<BuildLogEntry['type'], string> = {
   edge:    'text-[#b026ff]',
 };
 
-export default function BuildConsole() {
+export default function BuildConsole({ drawerMode = false, open = true, onClose }: {
+  drawerMode?: boolean;
+  open?: boolean;
+  onClose?: () => void;
+}) {
   const { globalLogs, buildProgress, isBuilding, buildResult, completedNodes, totalNodes, activeNodeId, nodeStates } = useBuildStore();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -32,21 +36,38 @@ export default function BuildConsole() {
 
   const activeState = activeNodeId ? nodeStates[activeNodeId] : null;
 
-  return (
-    <div className="w-full h-full bg-[#060809] border-l border-border-subtle flex flex-col font-mono">
+  const inner = (
+    <div className={`w-full flex flex-col font-mono ${
+      drawerMode
+        ? 'h-full bg-[#060809]'
+        : 'h-full bg-[#060809] border-l border-border-subtle'
+    }`}>
       {/* Console Header */}
       <div className="h-[46px] border-b border-border-subtle flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2">
           <Terminal size={12} className="text-accent" />
-          <span className="text-[10px] uppercase tracking-[0.25em] font-bold text-accent">Build Console</span>
+          <span className="text-[10px] uppercase tracking-[0.25em] font-bold text-accent">
+            {drawerMode ? 'OMX Terminal' : 'Build Console'}
+          </span>
         </div>
-        <div className="text-[9px] font-mono text-text-dim uppercase tracking-widest">
-          {isBuilding ? (
-            <span className="text-[#ffcb6b] animate-pulse">● LIVE</span>
-          ) : buildResult ? (
-            <span className="text-[#50fa7b]">✓ DONE</span>
-          ) : (
-            <span>STANDBY</span>
+        <div className="flex items-center gap-2">
+          <div className="text-[9px] font-mono text-text-dim uppercase tracking-widest">
+            {isBuilding ? (
+              <span className="text-[#ffcb6b] animate-pulse">● LIVE</span>
+            ) : buildResult ? (
+              <span className="text-[#50fa7b]">✓ DONE</span>
+            ) : (
+              <span>STANDBY</span>
+            )}
+          </div>
+          {drawerMode && onClose && (
+            <button
+              onClick={onClose}
+              className="p-1 text-text-dim hover:text-white transition-colors rounded ml-1"
+              title="Minimize"
+            >
+              <ChevronDown size={14} />
+            </button>
           )}
         </div>
       </div>
@@ -157,4 +178,26 @@ export default function BuildConsole() {
       </div>
     </div>
   );
+
+  if (drawerMode) {
+    return (
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="build-console-drawer"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 240, opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.32, 0, 0.67, 0] }}
+            className="w-full shrink-0 border-t border-border-subtle overflow-hidden"
+            style={{ boxShadow: '0 -4px 24px rgba(0,0,0,0.4)' }}
+          >
+            {inner}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  }
+
+  return inner;
 }
