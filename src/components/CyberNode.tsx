@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeData } from '../lib/api';
 import { useGraphStore } from '../store/useGraphStore';
 import {
   Database, Layout, Server, Shield, Globe,
   CheckCircle2, AlertTriangle, FileText, FlaskConical,
+  Pencil, Check, X,
 } from 'lucide-react';
 
 type CyberNodeData = { data: NodeData; selected?: boolean };
@@ -31,6 +32,23 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
   const highlightSource  = useGraphStore((s) => s.highlightSource);
   const setSelectedNode  = useGraphStore((s) => s.setSelectedNode);
   const openRightPanel   = useGraphStore((s) => s.openRightPanel);
+  const updateNode       = useGraphStore((s) => s.updateNode);
+
+  // Inline description edit state
+  const [editing, setEditing]   = useState(false);
+  const [editText, setEditText] = useState(data.description ?? '');
+
+  function handleSave(e: React.MouseEvent) {
+    e.stopPropagation();
+    updateNode(data.id, { description: editText });
+    setEditing(false);
+  }
+
+  function handleDiscard(e: React.MouseEvent) {
+    e.stopPropagation();
+    setEditText(data.description ?? '');
+    setEditing(false);
+  }
 
   const isHighlighted = highlightedNodes.has(data.id);
   const isBlastSource = highlightSource === data.id;
@@ -117,13 +135,66 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
           <h3 className="text-[14px] leading-[1.2] font-semibold text-text-main">
             {data.label}
           </h3>
-          {data.description && (
-            <div className="mt-1.5 p-1.5 bg-black/20 rounded-[6px] border border-white/5">
-              <p className="text-[10.5px] text-text-dim leading-[1.5]">
-                {data.description}
-              </p>
-            </div>
-          )}
+
+          {/* Description block — editable inline */}
+          <div
+            className="group mt-1.5 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {editing ? (
+              /* ── Edit mode ─── */
+              <div className="flex flex-col gap-1.5">
+                <textarea
+                  autoFocus
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') handleDiscard(e as any);
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(e as any);
+                  }}
+                  className="w-full min-h-[72px] resize-none bg-black/40 border border-[#b026ff]/50 rounded-[6px] p-2 text-[10.5px] text-text-main leading-[1.5] outline-none focus:border-[#b026ff] transition-colors"
+                  style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(176,38,255,0.3) transparent' }}
+                />
+                <div className="flex justify-end gap-1.5">
+                  {/* Discard — red X */}
+                  <button
+                    onClick={handleDiscard}
+                    className="flex items-center gap-1 px-2 py-1 rounded-[6px] border border-[#ff003c]/40 bg-[#ff003c]/10 text-[#ff003c] text-[9px] font-bold uppercase tracking-wider hover:bg-[#ff003c]/20 hover:border-[#ff003c]/70 transition-colors"
+                    title="Discard changes (Esc)"
+                  >
+                    <X size={10} /> Discard
+                  </button>
+                  {/* Save — green check */}
+                  <button
+                    onClick={handleSave}
+                    className="flex items-center gap-1 px-2 py-1 rounded-[6px] border border-[#50fa7b]/40 bg-[#50fa7b]/10 text-[#50fa7b] text-[9px] font-bold uppercase tracking-wider hover:bg-[#50fa7b]/20 hover:border-[#50fa7b]/70 transition-colors"
+                    title="Save changes (⌘↵)"
+                  >
+                    <Check size={10} /> Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ── Read mode ── */
+              <div className="relative p-1.5 bg-black/20 rounded-[6px] border border-white/5 group-hover:border-white/10 transition-colors">
+                <p className="text-[10.5px] text-text-dim leading-[1.5] pr-5">
+                  {data.description || <span className="italic opacity-40">No description</span>}
+                </p>
+                {/* Pencil — appears on hover */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditText(data.description ?? '');
+                    setEditing(true);
+                  }}
+                  className="absolute top-1 right-1 p-0.5 rounded opacity-0 group-hover:opacity-100 text-text-dim hover:text-accent hover:bg-accent/10 transition-all"
+                  title="Edit description"
+                >
+                  <Pencil size={10} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {hasResearch && (
