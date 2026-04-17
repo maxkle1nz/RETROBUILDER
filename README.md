@@ -155,7 +155,7 @@ Export your curated blueprint for autonomous materialization by [OMX](https://oh
 - Blast radius highlighting (red origin, orange impact zone)
 - Mode-specific UI (Architect cyan → M1ND purple → BU1LDER green)
 
-### 🔨 BU1LDER — Live Construction Visualization (v0.5.0)
+### 🔨 BU1LDER — Live Construction Visualization
 Watch your blueprint come to life in real-time:
 - **Dark-to-light nodes** — start completely dark, illuminate as OMX builds each module
 - **Shimmer animation** — active build nodes pulse with a scanning light effect
@@ -165,7 +165,7 @@ Watch your blueprint come to life in real-time:
 - **Mission Complete** — final summary with files written, lines generated, and elapsed time
 - **SSE streaming** — real-time Server-Sent Events with exponential backoff reconnect
 
-### ⚡ KOMPLETUS — Full Pipeline Engine (v0.6.0)
+### ⚡ KOMPLETUS — Full Pipeline Engine
 End-to-end blueprint generation with 8 autonomous stages:
 - **KONSTRUKTOR** — skeleton generation from natural language prompt
 - **HARDENER** — critic + dreamer pass (wiring, hardening, missing modules)
@@ -176,14 +176,14 @@ End-to-end blueprint generation with 8 autonomous stages:
 - **QUALITY GATE** — final structural validation with 60 acceptance criteria
 - **KOMPLETUS** — delivery with full report modal
 
-### 🪞 SPECULAR — Full-Stack SSOT Protocol (v0.6.0)
+### 🪞 SPECULAR — Full-Stack SSOT Protocol
 The SPECULAR protocol guarantees that every backend node has a validated UIX representation:
 - **Parsimônia** — max 4-5 user moments per pipeline, domain language only
 - **SSOT Architecture** — backend = truth, UIX + mirror test = pure consumers
 - **Mirror Test** — `tests/kompletus-e2e.ts` validates UIX parity end-to-end
-- **Autonomous Evolution (SPECULAR MODE)** — agent self-evolves, mirror test guards UIX
+- **Autonomous Evolution (SPECULAR MODE)** — agent self-evolves per node during OMX build, testing via LLM-validated acceptance criteria and data contracts until it passes or hits max iterations.
 
-### 🔑 Key Rotation (v0.6.0)
+### 🔑 Key Rotation
 Gemini provider supports comma-separated API keys for round-robin rotation:
 - Auto-rotate on 429/quota errors
 - `GEMINI_API_KEYS="key1,key2,key3"` in `.env.local`
@@ -211,7 +211,7 @@ OMX (autonomous materialization)
     │  → Phase 2: Core Services (auth, APIs)
     │  → Phase 3: Integration (event buses, queues)
     │  → Phase 4: Interface (UI, CLI)
-    │  → Each module verified against acceptance criteria
+    │  → SPECULAR MODE: Each module is tested against AC. If fail → diagnose → fix.
     │
     ▼  Working system
 ```

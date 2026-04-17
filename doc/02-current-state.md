@@ -1,6 +1,6 @@
 # Current State of the System
 
-As of v0.6.0 (2026-04-17), the following features and components are implemented:
+As of v0.6.1 (2026-04-17), the following features and components are implemented:
 
 ## 1. Frontend Interface (UI/UX)
 - **Premium Typography:** Orbitron (display/header), Inter (UI), JetBrains Mono (code/terminal) — loaded from Google Fonts.
@@ -20,9 +20,9 @@ As of v0.6.0 (2026-04-17), the following features and components are implemented
 - **Persistent State:** `zustand/persist` saves graph, manifesto, architecture, and mode to `localStorage`.
 - **Priority Badges:** P1/P2/P3 build order indicators rendered on CyberNode components.
 - **AC Indicators:** Acceptance criteria count displayed on each node.
-- **OMX Export Button:** "Export to OMX" in the M1ND RightPanel generates a downloadable `.omx/plan.md` for autonomous materialization and activates Build Mode.
-- **BU1LDER Mode (v0.5.0):** Live construction environment with CyberNodeBuild animations, BuildConsole, BuildView, Build Tracker Checklist, SSE Streaming.
-- **KOMPLETUS Report Modal (v0.6.0):** Full-screen report with tabs: Modules (expandable node list), Artifacts (L1GHT outputs), Specular (parity gauge + user moments + coverage matrix), Summary.
+- **OMX Export Button:** "Export to OMX" in the RightPanel generates a downloadable `.omx/plan.md` for autonomous materialization and activates Build Mode.
+- **BU1LDER Mode:** Live construction environment with CyberNodeBuild animations, BuildConsole, BuildView, Build Tracker Checklist, SSE Streaming.
+- **KOMPLETUS Report Modal:** Full-screen report with tabs: Modules, Artifacts, Specular, Summary. "Accept & Continue" triggers zero-click flow into BU1LDER mode.
 
 ## 2. Backend API (Express)
 - **Secure API Gateway:** Express.js server (`server.ts`) with all AI keys server-side only.
@@ -36,7 +36,7 @@ As of v0.6.0 (2026-04-17), the following features and components are implemented
   - `/api/ai/analyzeArchitecture` — Structural audit and optimization (strips research metadata)
   - `/api/ai/performDeepResearch` — Multi-source deep research on individual modules
   - `/api/ai/kompletus` — Full KOMPLETUS pipeline (SSE streaming, 8 stages)
-  - `/api/omx/stream/:sessionId` — SSE endpoint for live build streaming
+  - `/api/omx/stream/:sessionId` — SSE endpoint for live build streaming with **SPECULAR MODE** (autonomous test→diagnose→fix→retest loop)
 
 ## 3. AI Integration (SSOT Provider Layer)
 - **Provider Factory:** `src/server/providers/` with provider-agnostic factory pattern.

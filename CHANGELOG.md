@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.6.1] — 2026-04-17
+
+### Added
+- **SPECULAR MODE** — Autonomous test→diagnose→fix→retest loop:
+  - Runs recursively per node in `omx-runner.ts` (up to 3 iterations)
+  - Evaluates implementation against Acceptance Criteria + Data Contracts via mirror test (`specular-mirror-test`)
+  - Deterministic fallback for disconnected LLM scenarios
+  - Emits `specular_iteration` SSE events (testing/failing/fixing/passed) with 🔍❌🔧✅ status icons in Build Console
+  - `build_complete` event payload augmented with specular certification summary
+
+### Changed
+- **OMX Wiring**: KompletusReport "Accept & Continue" now triggers full zero-click materialize flow: apply graph → `resetBuild()` → `initNodeStates()` → `startBuild()` → activate `builder` view.
+- **M1ND Graph Projection Fidelity**: Replaced `auto` full-directory ingestion (791 document nodes) with targeted `topology.md` ingestion (~15 architectural modules), ensuring accurate structural impact metrics.
+- Export to OMX functionality significantly refined, cleanly separating architectural signals from `researchContext` noise (blueprint exported payload reduced from ~148KB to ~15KB).
+
+### Fixed
+- Fixed critical `M1ndBridge.gatherStructuralContext()` mapping error where nodes were queried by human label (`seeds[0]`) instead of canonical `node_id`, resolving false-positive "Node not found" impact/predict errors.
+
 ## [0.6.0] — 2026-04-17
 
 ### Added
