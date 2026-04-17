@@ -4,24 +4,19 @@ import crypto from 'node:crypto';
 import {
   getRuntimeDirectory,
   type SessionDocument,
-  type SessionGraphData,
   type SessionNodeData,
 } from './session-store.js';
 import { getM1ndBridge } from './m1nd-bridge.js';
+import { extractSemanticRelatedModules } from './session-semantic.js';
+import {
+  collectReachable,
+  computeTopology,
+  projectNodeEntry,
+  type AnalysisIssue,
+  type BuildOrderEntry,
+} from './session-topology.js';
 
 export type ReadinessStatus = 'ready' | 'blocked' | 'needs_review';
-
-export interface AnalysisIssue {
-  code: string;
-  message: string;
-  nodeIds?: string[];
-}
-
-export interface BuildOrderEntry {
-  id: string;
-  label: string;
-  priority: number;
-}
 
 export interface BlueprintReadinessReport {
   status: ReadinessStatus;
@@ -76,23 +71,9 @@ export interface SessionAdvancedReport {
   };
 }
 
-interface TopologyResult {
-  buildOrder: BuildOrderEntry[];
-  hasCycles: boolean;
-  cycleNodeIds: string[];
-  unresolvedLinks: AnalysisIssue[];
-  byId: Map<string, SessionNodeData>;
-  upstream: Map<string, Set<string>>;
-  downstream: Map<string, Set<string>>;
-}
-
 const preparedSessions = new Map<string, string>();
 const runtimeArtifactFingerprints = new Map<string, string>();
 let lastProjectedSessionId: string | null = null;
-
-function toBuildEntry(node: SessionNodeData, priority: number): BuildOrderEntry {
-  return { id: node.id, label: node.label, priority };
-}
 
 function slugify(value: string) {
   return value
@@ -105,248 +86,6 @@ function slugify(value: string) {
 function safePct(part: number, total: number) {
   if (!total) return 0;
   return Math.round((part / total) * 100);
-}
-
-const SEMANTIC_RESULT_FIELDS = [
-  'label',
-  'title',
-  'name',
-  'intent_summary',
-  'summary',
-  'description',
-  'snippet',
-  'preview',
-  'text',
-  'content',
-  'node_id',
-  'external_id',
-  'id',
-] as const;
-
-function normalizeSemanticToken(value: string) {
-  return value
-    .replace(/\s*\{#.*?\}\s*$/g, ' ')
-    .replace(/\[(.*?)\]\(#.*?\)/g, '$1')
-    .replace(/[`*_>#]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function buildSemanticModuleIndex(nodes: SessionNodeData[]) {
-  const aliasToLabel = new Map<string, string>();
-  const normalizedLabels = nodes.map((node) => ({
-    label: node.label,
-    normalizedLabel: normalizeSemanticToken(node.label),
-  }));
-
-  for (const node of nodes) {
-    const aliases = new Set<string>([
-      normalizeSemanticToken(node.label),
-      normalizeSemanticToken(node.id),
-      normalizeSemanticToken(slugify(node.label)),
-    ]);
-
-    for (const alias of aliases) {
-      if (alias) aliasToLabel.set(alias, node.label);
-    }
-  }
-
-  return { aliasToLabel, normalizedLabels };
-}
-
-function resolveSemanticModuleLabel(
-  candidate: string,
-  currentNodeLabel: string,
-  moduleIndex: ReturnType<typeof buildSemanticModuleIndex>,
-) {
-  const normalized = normalizeSemanticToken(candidate);
-  if (!normalized) return null;
-
-  const exact = moduleIndex.aliasToLabel.get(normalized);
-  if (exact && exact !== currentNodeLabel) {
-    return exact;
-  }
-
-  if (normalized.length < 6) {
-    return null;
-  }
-
-  const fuzzyMatches = moduleIndex.normalizedLabels.filter(({ normalizedLabel }) =>
-    normalizedLabel.includes(normalized) || normalized.includes(normalizedLabel),
-  );
-
-  if (fuzzyMatches.length === 1 && fuzzyMatches[0].label !== currentNodeLabel) {
-    return fuzzyMatches[0].label;
-  }
-
-  return null;
-}
-
-function extractSemanticCandidates(value: unknown): string[] {
-  if (typeof value !== 'string') return [];
-
-  const text = value.trim();
-  if (!text) return [];
-
-  const candidates: string[] = [];
-  const seen = new Set<string>();
-  const push = (candidate: string) => {
-    const trimmed = candidate.trim();
-    if (!trimmed || seen.has(trimmed)) return;
-    seen.add(trimmed);
-    candidates.push(trimmed);
-  };
-
-  for (const match of text.matchAll(/\[([^\]]+)\]\(#([^)]+)\)/g)) {
-    push(match[1]);
-    push(match[2]);
-  }
-
-  for (const match of text.matchAll(/(?:^|::|#|\/)([a-z0-9][a-z0-9-]{2,})$/gi)) {
-    push(match[1]);
-  }
-
-  const cleaned = text
-    .replace(/\s*\{#.*?\}\s*$/g, ' ')
-    .replace(/^[>\s]+/g, '')
-    .replace(/^(?:depends|drives|powered by|used by|consumes|produces|calls|uses|reads|writes|supports|connects to)\s*:\s*/i, '')
-    .replace(/\[(.*?)\]\(#.*?\)/g, '$1')
-    .replace(/[`*_]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (cleaned) {
-    push(cleaned);
-    for (const part of cleaned.split(/\s*(?:,|;|\||\band\b)\s*/i)) {
-      push(part);
-    }
-  }
-
-  return candidates;
-}
-
-function extractSemanticRelatedModules(results: any[], session: SessionDocument, node: SessionNodeData): string[] {
-  if (!Array.isArray(results) || results.length === 0) return [];
-
-  const moduleIndex = buildSemanticModuleIndex(session.graph.nodes);
-  const related: string[] = [];
-  const seenLabels = new Set<string>([node.label]);
-
-  const maybeAdd = (candidate: string) => {
-    const resolved = resolveSemanticModuleLabel(candidate, node.label, moduleIndex);
-    if (!resolved || seenLabels.has(resolved)) return;
-    seenLabels.add(resolved);
-    related.push(resolved);
-  };
-
-  for (const item of results) {
-    if (typeof item === 'string') {
-      for (const candidate of extractSemanticCandidates(item)) {
-        maybeAdd(candidate);
-      }
-    } else if (item && typeof item === 'object') {
-      for (const field of SEMANTIC_RESULT_FIELDS) {
-        for (const candidate of extractSemanticCandidates(item[field])) {
-          maybeAdd(candidate);
-        }
-      }
-    }
-
-    if (related.length >= 5) break;
-  }
-
-  return related.slice(0, 5);
-}
-
-function computeTopology(graph: SessionGraphData): TopologyResult {
-  const byId = new Map<string, SessionNodeData>();
-  const inDegree = new Map<string, number>();
-  const outgoing = new Map<string, string[]>();
-  const incoming = new Map<string, string[]>();
-  const unresolvedLinks: AnalysisIssue[] = [];
-
-  for (const node of graph.nodes) {
-    byId.set(node.id, node);
-    inDegree.set(node.id, 0);
-    outgoing.set(node.id, []);
-    incoming.set(node.id, []);
-  }
-
-  for (const link of graph.links) {
-    if (!byId.has(link.source) || !byId.has(link.target)) {
-      unresolvedLinks.push({
-        code: 'UNRESOLVED_LINK',
-        message: `Link ${link.source} -> ${link.target} references a missing node.`,
-        nodeIds: [link.source, link.target],
-      });
-      continue;
-    }
-    outgoing.get(link.source)!.push(link.target);
-    incoming.get(link.target)!.push(link.source);
-    inDegree.set(link.target, (inDegree.get(link.target) || 0) + 1);
-  }
-
-  const queue = [...graph.nodes.filter((node) => (inDegree.get(node.id) || 0) === 0).map((node) => node.id)];
-  const buildOrder: BuildOrderEntry[] = [];
-  const levelMap = new Map<string, number>();
-
-  while (queue.length > 0) {
-    const batch = [...queue];
-    queue.length = 0;
-
-    for (const id of batch) {
-      const parents = incoming.get(id) || [];
-      const computedPriority = parents.length === 0
-        ? 1
-        : Math.max(...parents.map((parentId) => levelMap.get(parentId) || 1)) + 1;
-      levelMap.set(id, computedPriority);
-      buildOrder.push(toBuildEntry(byId.get(id)!, computedPriority));
-
-      for (const target of outgoing.get(id) || []) {
-        inDegree.set(target, (inDegree.get(target) || 0) - 1);
-        if ((inDegree.get(target) || 0) === 0) {
-          queue.push(target);
-        }
-      }
-    }
-  }
-
-  const cycleNodeIds = graph.nodes
-    .filter((node) => !levelMap.has(node.id))
-    .map((node) => node.id);
-
-  return {
-    buildOrder: buildOrder.sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label)),
-    hasCycles: cycleNodeIds.length > 0,
-    cycleNodeIds,
-    unresolvedLinks,
-    byId,
-    upstream: new Map([...incoming.entries()].map(([k, v]) => [k, new Set(v)])),
-    downstream: new Map([...outgoing.entries()].map(([k, v]) => [k, new Set(v)])),
-  };
-}
-
-function collectReachable(startId: string, graph: Map<string, Set<string>>, byId: Map<string, SessionNodeData>, buildOrder: BuildOrderEntry[]) {
-  const visited = new Set<string>();
-  const stack = [...(graph.get(startId) || [])];
-  while (stack.length > 0) {
-    const id = stack.pop()!;
-    if (visited.has(id)) continue;
-    visited.add(id);
-    for (const next of graph.get(id) || []) {
-      if (!visited.has(next)) stack.push(next);
-    }
-  }
-  const priorities = new Map(buildOrder.map((entry) => [entry.id, entry.priority]));
-  return [...visited]
-    .map((id) => byId.get(id))
-    .filter(Boolean)
-    .map((node) => toBuildEntry(node!, priorities.get(node!.id) || 1))
-    .sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label));
 }
 
 async function writeRuntimeArtifacts(session: SessionDocument, fingerprint: string) {
@@ -708,7 +447,7 @@ export async function analyzeBlueprintImpact(session: SessionDocument, nodeId: s
   const changedTogether = [...directNeighbors]
     .map((id) => topology.byId.get(id))
     .filter(Boolean)
-    .map((neighbor) => toBuildEntry(neighbor!, priorities.get(neighbor!.id) || 1))
+    .map((neighbor) => projectNodeEntry(neighbor!, priorities.get(neighbor!.id) || 1))
     .sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label));
 
   return {
@@ -747,7 +486,7 @@ export async function analyzeBlueprintGaps(session: SessionDocument): Promise<Bl
   });
 
   const priorities = new Map(topology.buildOrder.map((entry) => [entry.id, entry.priority]));
-  const projectNode = (node: SessionNodeData) => toBuildEntry(node, priorities.get(node.id) || node.priority || 1);
+  const projectNode = (node: SessionNodeData) => projectNodeEntry(node, priorities.get(node.id) || node.priority || 1);
 
   return {
     blockers: readiness.blockers,
