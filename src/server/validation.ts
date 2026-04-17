@@ -92,6 +92,7 @@ export const SessionDocumentSchema = z.object({
   source: SessionSourceSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
+  archived: z.boolean().default(false),
   manifesto: stringish.default(''),
   architecture: stringish.default(''),
   graph: GraphDataSchema,
@@ -102,6 +103,7 @@ export const SessionDocumentSchema = z.object({
 export const SessionPatchSchema = z.object({
   name: z.string().optional(),
   source: SessionSourceSchema.optional(),
+  archived: z.boolean().optional(),
   manifesto: stringish.optional(),
   architecture: stringish.optional(),
   graph: GraphDataSchema.optional(),

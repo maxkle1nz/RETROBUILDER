@@ -107,6 +107,161 @@ function safePct(part: number, total: number) {
   return Math.round((part / total) * 100);
 }
 
+const SEMANTIC_RESULT_FIELDS = [
+  'label',
+  'title',
+  'name',
+  'intent_summary',
+  'summary',
+  'description',
+  'snippet',
+  'preview',
+  'text',
+  'content',
+  'node_id',
+  'external_id',
+  'id',
+] as const;
+
+function normalizeSemanticToken(value: string) {
+  return value
+    .replace(/\s*\{#.*?\}\s*$/g, ' ')
+    .replace(/\[(.*?)\]\(#.*?\)/g, '$1')
+    .replace(/[`*_>#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildSemanticModuleIndex(nodes: SessionNodeData[]) {
+  const aliasToLabel = new Map<string, string>();
+  const normalizedLabels = nodes.map((node) => ({
+    label: node.label,
+    normalizedLabel: normalizeSemanticToken(node.label),
+  }));
+
+  for (const node of nodes) {
+    const aliases = new Set<string>([
+      normalizeSemanticToken(node.label),
+      normalizeSemanticToken(node.id),
+      normalizeSemanticToken(slugify(node.label)),
+    ]);
+
+    for (const alias of aliases) {
+      if (alias) aliasToLabel.set(alias, node.label);
+    }
+  }
+
+  return { aliasToLabel, normalizedLabels };
+}
+
+function resolveSemanticModuleLabel(
+  candidate: string,
+  currentNodeLabel: string,
+  moduleIndex: ReturnType<typeof buildSemanticModuleIndex>,
+) {
+  const normalized = normalizeSemanticToken(candidate);
+  if (!normalized) return null;
+
+  const exact = moduleIndex.aliasToLabel.get(normalized);
+  if (exact && exact !== currentNodeLabel) {
+    return exact;
+  }
+
+  if (normalized.length < 6) {
+    return null;
+  }
+
+  const fuzzyMatches = moduleIndex.normalizedLabels.filter(({ normalizedLabel }) =>
+    normalizedLabel.includes(normalized) || normalized.includes(normalizedLabel),
+  );
+
+  if (fuzzyMatches.length === 1 && fuzzyMatches[0].label !== currentNodeLabel) {
+    return fuzzyMatches[0].label;
+  }
+
+  return null;
+}
+
+function extractSemanticCandidates(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+
+  const text = value.trim();
+  if (!text) return [];
+
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const push = (candidate: string) => {
+    const trimmed = candidate.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    candidates.push(trimmed);
+  };
+
+  for (const match of text.matchAll(/\[([^\]]+)\]\(#([^)]+)\)/g)) {
+    push(match[1]);
+    push(match[2]);
+  }
+
+  for (const match of text.matchAll(/(?:^|::|#|\/)([a-z0-9][a-z0-9-]{2,})$/gi)) {
+    push(match[1]);
+  }
+
+  const cleaned = text
+    .replace(/\s*\{#.*?\}\s*$/g, ' ')
+    .replace(/^[>\s]+/g, '')
+    .replace(/^(?:depends|drives|powered by|used by|consumes|produces|calls|uses|reads|writes|supports|connects to)\s*:\s*/i, '')
+    .replace(/\[(.*?)\]\(#.*?\)/g, '$1')
+    .replace(/[`*_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (cleaned) {
+    push(cleaned);
+    for (const part of cleaned.split(/\s*(?:,|;|\||\band\b)\s*/i)) {
+      push(part);
+    }
+  }
+
+  return candidates;
+}
+
+function extractSemanticRelatedModules(results: any[], session: SessionDocument, node: SessionNodeData): string[] {
+  if (!Array.isArray(results) || results.length === 0) return [];
+
+  const moduleIndex = buildSemanticModuleIndex(session.graph.nodes);
+  const related: string[] = [];
+  const seenLabels = new Set<string>([node.label]);
+
+  const maybeAdd = (candidate: string) => {
+    const resolved = resolveSemanticModuleLabel(candidate, node.label, moduleIndex);
+    if (!resolved || seenLabels.has(resolved)) return;
+    seenLabels.add(resolved);
+    related.push(resolved);
+  };
+
+  for (const item of results) {
+    if (typeof item === 'string') {
+      for (const candidate of extractSemanticCandidates(item)) {
+        maybeAdd(candidate);
+      }
+    } else if (item && typeof item === 'object') {
+      for (const field of SEMANTIC_RESULT_FIELDS) {
+        for (const candidate of extractSemanticCandidates(item[field])) {
+          maybeAdd(candidate);
+        }
+      }
+    }
+
+    if (related.length >= 5) break;
+  }
+
+  return related.slice(0, 5);
+}
+
 function computeTopology(graph: SessionGraphData): TopologyResult {
   const byId = new Map<string, SessionNodeData>();
   const inDegree = new Map<string, number>();
@@ -242,10 +397,10 @@ async function writeRuntimeArtifacts(session: SessionDocument, fingerprint: stri
   await writeFile(path.join(runtimeDir, 'session.md'), graphIndex);
 
   // ─── Structural Topology for m1nd ─────────────────────────────────────
-  // Write a single topology.md with explicit markdown cross-references.
-  // m1nd's auto adapter creates edges from [Label](#anchor) links,
-  // giving us ~N nodes / ~M edges matching the blueprint — NOT the 791-node
-  // document-dominated graph from ingesting the full runtime directory.
+  // Keep this file intentionally compact. The m1nd markdown adapter expands
+  // every section/block it sees into graph nodes, so dense prose and repeated
+  // subsection headers create noise. A minimal per-module format preserves the
+  // dependency signal while reducing document-only nodes substantially.
   const topologyLines: string[] = [
     `# ${session.name} — Blueprint Topology`,
     '',
@@ -269,20 +424,9 @@ async function writeRuntimeArtifacts(session: SessionDocument, fingerprint: stri
 
     topologyLines.push(
       `## ${node.label} {#${node.id}}`,
-      '',
-      `- **ID**: \`${node.id}\``,
-      `- **Type**: ${node.type}`,
-      `- **Status**: ${node.status || 'active'}`,
-      '',
-      node.description || '',
-      '',
-      '### Depends On',
-      ...(deps.length ? deps.map((d) => `- ${d}`) : ['- None']),
-      '',
-      '### Drives',
-      ...(drives.length ? drives.map((d) => `- ${d}`) : ['- None']),
-      '',
-      '---',
+      `Type: ${node.type}`,
+      `Depends: ${deps.length ? deps.join(', ') : 'None'}`,
+      `Drives: ${drives.length ? drives.join(', ') : 'None'}`,
       '',
     );
   }
@@ -547,12 +691,8 @@ export async function analyzeBlueprintImpact(session: SessionDocument, nodeId: s
   await withProjectedSession(session, async (projection, bridge) => {
     if (!projection.prepared || !bridge.isConnected) return;
     try {
-      const result = await bridge.seek(`${node.label} ${node.description}`, 5);
-      semanticRelated = (result?.results || [])
-        .map((item: any) => item.label || item.intent_summary)
-        .filter(Boolean)
-        .filter((label: string) => label !== node.label)
-        .slice(0, 5);
+      const result = await bridge.seek(`${node.label} ${node.id}`, 12);
+      semanticRelated = extractSemanticRelatedModules(result?.results || [], session, node);
     } catch {
       semanticRelated = [];
     }
@@ -626,6 +766,33 @@ export async function analyzeBlueprintGaps(session: SessionDocument): Promise<Bl
  * after projection (e.g. "file::topology.md::api-gateway"). This function
  * uses activate() to find the closest canonical match by label.
  */
+function normalizeActivationLabel(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/\s*\{#.*?\}\s*$/g, '')
+    .replace(/^- \[(.*?)\]\(#.*?\)$/g, '$1')
+    .replace(/^- \*\*ID\*\*: `(.+?)`$/g, '$1')
+    .trim()
+    .toLowerCase();
+}
+
+function scoreActivationCandidate(candidate: any): number {
+  const nodeId = String(candidate?.node_id || candidate?.external_id || candidate?.id || '');
+  const tags = Array.isArray(candidate?.tags) ? candidate.tags.map(String) : [];
+  const type = String(candidate?.type || '').toLowerCase();
+  let score = typeof candidate?.activation === 'number' ? candidate.activation : 0;
+
+  if (nodeId.includes('::section::')) score += 100;
+  if (type === 'module') score += 80;
+  if (tags.some((tag) => tag.includes('universal:section'))) score += 60;
+  if (nodeId.includes('::binding::')) score += 20;
+  if (nodeId.includes('::link::')) score -= 40;
+  if (type === 'reference') score -= 20;
+  if (type === 'concept') score -= 30;
+
+  return score;
+}
+
 async function resolveNodeId(
   nodeId: string,
   session: SessionDocument,
@@ -638,11 +805,16 @@ async function resolveNodeId(
     const result = await bridge.activate(node.label, 3);
     const candidates = result?.activated || result?.results || result?.seeds || [];
     if (candidates.length > 0) {
-      // Prefer exact label match, then closest activation
-      const exact = candidates.find(
-        (c: any) => (c.label || '').toLowerCase() === node.label.toLowerCase(),
-      );
-      const best = exact || candidates[0];
+      const normalizedTarget = normalizeActivationLabel(node.label);
+      const best = [...candidates].sort((a: any, b: any) => {
+        const aLabel = normalizeActivationLabel(a?.label);
+        const bLabel = normalizeActivationLabel(b?.label);
+        const aPreferred = aLabel === normalizedTarget ? 1 : 0;
+        const bPreferred = bLabel === normalizedTarget ? 1 : 0;
+        const aScore = scoreActivationCandidate(a);
+        const bScore = scoreActivationCandidate(b);
+        return bPreferred - aPreferred || bScore - aScore;
+      })[0];
       return best.node_id || best.external_id || best.id || nodeId;
     }
   } catch {

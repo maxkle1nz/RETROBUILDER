@@ -58,6 +58,49 @@ export interface M1ndStructuralContext {
   layerViolations: any[];
 }
 
+function normalizeActivationLabel(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/\s*\{#.*?\}\s*$/g, '')
+    .replace(/^- \[(.*?)\]\(#.*?\)$/g, '$1')
+    .replace(/^- \*\*ID\*\*: `(.+?)`$/g, '$1')
+    .trim()
+    .toLowerCase();
+}
+
+function scoreActivationCandidate(candidate: any): number {
+  const nodeId = String(candidate?.node_id || candidate?.external_id || candidate?.id || '');
+  const tags = Array.isArray(candidate?.tags) ? candidate.tags.map(String) : [];
+  const type = String(candidate?.type || '').toLowerCase();
+  let score = typeof candidate?.activation === 'number' ? candidate.activation : 0;
+
+  if (nodeId.includes('::section::')) score += 100;
+  if (type === 'module') score += 80;
+  if (tags.some((tag) => tag.includes('universal:section'))) score += 60;
+  if (nodeId.includes('::binding::')) score += 20;
+  if (nodeId.includes('::link::')) score -= 40;
+  if (type === 'reference') score -= 20;
+  if (type === 'concept') score -= 30;
+
+  return score;
+}
+
+function selectBestActivatedNode(candidates: any[], preferredLabel?: string) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+
+  const preferred = normalizeActivationLabel(preferredLabel);
+  return [...candidates]
+    .sort((a, b) => {
+      const aLabel = normalizeActivationLabel(a?.label);
+      const bLabel = normalizeActivationLabel(b?.label);
+      const aPreferred = preferred && aLabel === preferred ? 1 : 0;
+      const bPreferred = preferred && bLabel === preferred ? 1 : 0;
+      const aScore = scoreActivationCandidate(a);
+      const bScore = scoreActivationCandidate(b);
+      return bPreferred - aPreferred || bScore - aScore;
+    })[0];
+}
+
 // ─── M1ND Bridge Class ──────────────────────────────────────────────
 
 export class M1ndBridge extends EventEmitter {
@@ -330,7 +373,7 @@ export class M1ndBridge extends EventEmitter {
       // We MUST use the activation results, never seeds, for downstream graph ops.
       const activatedNodes = activated?.activated || activated?.results || activated?.seeds || [];
       if (activatedNodes.length > 0) {
-        const topNode = activatedNodes[0];
+        const topNode = selectBestActivatedNode(activatedNodes, query) || activatedNodes[0];
         const topNodeId = topNode.node_id || topNode.external_id || topNode.id;
 
         if (topNodeId) {

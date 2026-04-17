@@ -53,6 +53,7 @@ export interface SessionDocument {
   source: SessionSource;
   createdAt: string;
   updatedAt: string;
+  archived: boolean;
   manifesto: string;
   architecture: string;
   graph: SessionGraphData;
@@ -66,6 +67,7 @@ export interface SessionSummary {
   source: SessionSource;
   createdAt: string;
   updatedAt: string;
+  archived: boolean;
   nodeCount: number;
   linkCount: number;
   importMeta?: CodebaseImportMeta;
@@ -74,6 +76,7 @@ export interface SessionSummary {
 export interface SessionPatch {
   name?: string;
   source?: SessionSource;
+  archived?: boolean;
   manifesto?: string;
   architecture?: string;
   graph?: SessionGraphData;
@@ -108,6 +111,7 @@ function toSummary(session: SessionDocument): SessionSummary {
     source: session.source,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
+    archived: session.archived,
     nodeCount: session.graph.nodes.length,
     linkCount: session.graph.links.length,
     importMeta: session.importMeta,
@@ -169,6 +173,7 @@ export async function createSession(
     source: input.source || 'manual',
     createdAt: now,
     updatedAt: now,
+    archived: input.archived || false,
     manifesto: input.manifesto || '',
     architecture: input.architecture || '',
     graph,

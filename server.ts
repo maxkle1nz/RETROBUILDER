@@ -62,6 +62,7 @@ function createEphemeralSession(input: {
     source: input.source || 'manual',
     createdAt: now,
     updatedAt: now,
+    archived: false,
     manifesto: input.manifesto || '',
     architecture: input.architecture || '',
     graph: input.graph || { nodes: [], links: [] },

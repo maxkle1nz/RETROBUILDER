@@ -57,6 +57,7 @@ export interface SessionSummary {
   source: SessionSource;
   createdAt: string;
   updatedAt: string;
+  archived: boolean;
   nodeCount: number;
   linkCount: number;
   importMeta?: CodebaseImportMeta;
@@ -68,6 +69,7 @@ export interface SessionDocument {
   source: SessionSource;
   createdAt: string;
   updatedAt: string;
+  archived: boolean;
   manifesto: string;
   architecture: string;
   graph: GraphData;
@@ -286,7 +288,7 @@ export async function loadSession(id: string): Promise<SessionDocument> {
 
 export async function saveSession(
   id: string,
-  input: Partial<Pick<SessionDocument, 'name' | 'manifesto' | 'architecture' | 'graph' | 'projectContext' | 'importMeta'>>,
+  input: Partial<Pick<SessionDocument, 'name' | 'archived' | 'manifesto' | 'architecture' | 'graph' | 'projectContext' | 'importMeta'>>,
 ): Promise<SessionDocument> {
   const res = await fetch(`/api/sessions/${id}`, {
     method: 'PUT',
