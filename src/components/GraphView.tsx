@@ -39,18 +39,39 @@ const TYPE_EDGE_COLOR: Record<string, string> = {
   external: '#00ff66',
 };
 
+function hexWithAlpha(hex: string, alpha: number): string {
+  // Convert #rrggbb to rgba
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function buildEdgeStyle(
   edge: Edge,
   activeNodeId: string | null,
   typeColorMap: Record<string, string>,
 ): Partial<Edge> {
-  const isActive =
-    activeNodeId !== null &&
-    (edge.source === activeNodeId || edge.target === activeNodeId);
-
   const sourceColor = typeColorMap[edge.source] ?? 'var(--color-accent)';
+  const isHex = sourceColor.startsWith('#');
 
-  if (isActive) {
+  // When no node is active → show type color at 35% opacity
+  if (activeNodeId === null) {
+    const idleColor = isHex ? hexWithAlpha(sourceColor, 0.35) : 'rgba(0,242,255,0.35)';
+    return {
+      animated: false,
+      style: { stroke: idleColor, strokeWidth: 1 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: idleColor },
+      label: undefined,
+      labelStyle: undefined,
+      labelBgStyle: undefined,
+    };
+  }
+
+  const isConnected = edge.source === activeNodeId || edge.target === activeNodeId;
+
+  if (isConnected) {
+    // Full neon glow on connected edges
     return {
       animated: true,
       style: {
@@ -58,10 +79,7 @@ function buildEdgeStyle(
         strokeWidth: 2,
         filter: `drop-shadow(0 0 4px ${sourceColor})`,
       },
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: sourceColor,
-      },
+      markerEnd: { type: MarkerType.ArrowClosed, color: sourceColor },
       labelStyle: {
         fill: sourceColor,
         fontFamily: "'JetBrains Mono', monospace",
@@ -76,16 +94,12 @@ function buildEdgeStyle(
     };
   }
 
+  // Non-connected: dim to 15% but keep type color
+  const dimColor = isHex ? hexWithAlpha(sourceColor, 0.15) : 'rgba(0,242,255,0.15)';
   return {
     animated: false,
-    style: {
-      stroke: 'rgba(255,255,255,0.06)',
-      strokeWidth: 1,
-    },
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      color: 'rgba(255,255,255,0.06)',
-    },
+    style: { stroke: dimColor, strokeWidth: 1 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: dimColor },
     label: undefined,
     labelStyle: undefined,
     labelBgStyle: undefined,
@@ -160,18 +174,20 @@ function Flow() {
       data: n,
     })) as unknown as Node[];
 
-    const initialEdges: Edge[] = graphData.links.map((l, idx) => ({
-      id: `e-${l.source}-${l.target}-${idx}`,
-      source: l.source,
-      target: l.target,
-      label: l.label,
-      animated: false,
-      style: { stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1 },
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: 'rgba(255,255,255,0.06)',
-      },
-    }));
+    const initialEdges: Edge[] = graphData.links.map((l, idx) => {
+      const srcColor = TYPE_EDGE_COLOR[(graphData.nodes.find(n => n.id === l.source)?.type ?? '')] ?? 'var(--color-accent)';
+      const isHex = srcColor.startsWith('#');
+      const idleColor = isHex ? hexWithAlpha(srcColor, 0.35) : 'rgba(0,242,255,0.35)';
+      return {
+        id: `e-${l.source}-${l.target}-${idx}`,
+        source: l.source,
+        target: l.target,
+        label: l.label,
+        animated: false,
+        style: { stroke: idleColor, strokeWidth: 1 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: idleColor },
+      };
+    });
 
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       initialNodes,
