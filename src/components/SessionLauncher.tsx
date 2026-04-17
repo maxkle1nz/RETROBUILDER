@@ -288,7 +288,7 @@ export default function SessionLauncher() {
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-4xl bg-[#090b10] border border-accent/30 rounded-md overflow-hidden shadow-[0_0_40px_rgba(0,242,255,0.08)]"
+        className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-[#090b10] border border-accent/30 rounded-md overflow-hidden shadow-[0_0_40px_rgba(0,242,255,0.08)]"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
           <div>
@@ -320,7 +320,7 @@ export default function SessionLauncher() {
           ))}
         </div>
 
-        <div className="p-6">
+        <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.08) transparent' }}>
           {tab === 'new' && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
