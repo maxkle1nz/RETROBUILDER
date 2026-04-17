@@ -91,14 +91,15 @@ You can switch providers at runtime via the Model Selector panel in the UI — n
 │                         │  HTTP                             │
 ├─────────────────────────┼───────────────────────────────────┤
 │                    API Gateway                              │
-│  Express.js · 14 /api/m1nd/* · /api/ai/* · /api/omx/* · /api/export/*  │
+│  Express.js · route modules for sessions · config · m1nd · omx · ai    │
 │                                                             │
-│  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐    │
-│  │SSOT Provider  │  │ M1ND Bridge│  │  Web Research    │    │
-│  │Layer (xAI,   │  │ (MCP stdio)│  │  (Perplexity,    │    │
-│  │OpenAI,Bridge)│  │            │  │  Semantic Scholar,│    │
-│  └──────────────┘  └────────────┘  │  GitHub, CrossRef)│    │
-│                                     └──────────────────┘    │
+│  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐     │
+│  │SSOT Provider │  │ M1ND Bridge│  │ Web Research +   │     │
+│  │Layer         │  │ (MCP stdio)│  │ KOMPLETUS        │     │
+│  └──────────────┘  └────────────┘  └──────────────────┘     │
+│                                                             │
+│  Session domain: payload · topology · semantic · projection │
+│  · advanced · insights · readiness                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -263,7 +264,7 @@ The connection indicator in the top-right of the analysis panel shows green when
 | Layer | Technology |
 |---|---|
 | Frontend | React 19, React Flow, Zustand, Framer Motion |
-| Backend | Express.js, TypeScript, Zod validation |
+| Backend | Express.js, TypeScript, route-modular API, Zod validation |
 | AI Providers | xAI Grok, Google Gemini (key rotation), OpenAI, THE BRIDGE |
 | Graph Engine | m1nd (MCP stdio) |
 | Pipeline | KOMPLETUS (8-stage autonomous) |

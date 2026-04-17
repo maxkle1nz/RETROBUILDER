@@ -25,7 +25,8 @@ As of v0.6.1 (2026-04-17), the following features and components are implemented
 - **KOMPLETUS Report Modal:** Full-screen report with tabs: Modules, Artifacts, Specular, Summary. "Accept & Continue" triggers zero-click flow into BU1LDER mode.
 
 ## 2. Backend API (Express)
-- **Secure API Gateway:** Express.js server (`server.ts`) with all AI keys server-side only.
+- **Secure API Gateway:** Express.js server with all AI keys server-side only.
+- **Route-Modular Composition:** `server.ts` is now a thin composition root wiring dedicated routers for `sessions`, `config`, `m1nd`, `omx`, and `ai`.
 - **Rate Limiting:** `express-rate-limit` at 20 req/min per IP on all `/api/ai/*` routes.
 - **Input Validation:** All POST body fields validated; returns `400` on failure.
 - **Schema Validation:** Zod v4 schemas (`src/server/validation.ts`) for all AI responses with graceful defaults.
@@ -58,6 +59,7 @@ As of v0.6.1 (2026-04-17), the following features and components are implemented
 - **Structural Injection:** Kreator proposals are grounded in m1nd blast radius and co-change prediction data.
 - **Blast Radius Visualization:** Red pulse for blast origin, orange glow for impact zone nodes.
 - **Graceful Degradation:** All m1nd calls return `null` on failure — the Kreator continues without structural awareness.
+- **Session Projection Pipeline:** session blueprints are projected through dedicated modules (`session-payload`, `session-topology`, `session-semantic`, `session-projection`, `session-advanced`, `session-insights`, `session-readiness`) instead of living in one oversized analysis file.
 
 ## 5. Deep Research Engine
 - **Multi-Source Research:** `src/server/web-research.ts` integrates: Perplexity AI, Serper Web + Scholar Search, Semantic Scholar API, CrossRef API, GitHub Code Search, Jina Reader.
@@ -118,4 +120,3 @@ As of v0.6.1 (2026-04-17), the following features and components are implemented
 - **SPECULAR Assertions:** Mirror test validates moments count, parity score, coverage.
 - **Architecture Analyzer:** Fixed — no longer confuses research data with system modules.
 - **Server:** Stable on port 3000 with 4 AI providers, m1nd MCP bridge, and full research engine.
-
