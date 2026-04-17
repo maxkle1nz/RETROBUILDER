@@ -209,7 +209,20 @@ async function writeRuntimeArtifacts(session: SessionDocument, fingerprint: stri
       source: session.source,
       updatedAt: session.updatedAt,
     },
-    nodes: session.graph.nodes,
+    nodes: session.graph.nodes.map((n) => ({
+      id: n.id,
+      label: n.label,
+      type: n.type,
+      status: n.status,
+      priority: n.priority,
+      description: n.description,
+      data_contract: n.data_contract,
+      decision_rationale: n.decision_rationale,
+      acceptance_criteria: n.acceptance_criteria,
+      error_handling: n.error_handling,
+      // STRIPPED: researchContext, researchMeta, constructionNotes
+      // These fields bias m1nd toward semantic/document weight over structural topology
+    })),
     links: session.graph.links,
   };
 
@@ -227,6 +240,54 @@ async function writeRuntimeArtifacts(session: SessionDocument, fingerprint: stri
     ...session.graph.nodes.map((node) => `- ${node.label} (${node.type})`),
   ].join('\n');
   await writeFile(path.join(runtimeDir, 'session.md'), graphIndex);
+
+  // ─── Structural Topology for m1nd ─────────────────────────────────────
+  // Write a single topology.md with explicit markdown cross-references.
+  // m1nd's auto adapter creates edges from [Label](#anchor) links,
+  // giving us ~N nodes / ~M edges matching the blueprint — NOT the 791-node
+  // document-dominated graph from ingesting the full runtime directory.
+  const topologyLines: string[] = [
+    `# ${session.name} — Blueprint Topology`,
+    '',
+    `> ${session.graph.nodes.length} modules, ${session.graph.links.length} dependencies`,
+    '',
+  ];
+
+  for (const node of session.graph.nodes) {
+    const deps = session.graph.links
+      .filter((l) => l.target === node.id)
+      .map((l) => {
+        const src = session.graph.nodes.find((n) => n.id === l.source);
+        return src ? `[${src.label}](#${src.id})` : l.source;
+      });
+    const drives = session.graph.links
+      .filter((l) => l.source === node.id)
+      .map((l) => {
+        const tgt = session.graph.nodes.find((n) => n.id === l.target);
+        return tgt ? `[${tgt.label}](#${tgt.id})` : l.target;
+      });
+
+    topologyLines.push(
+      `## ${node.label} {#${node.id}}`,
+      '',
+      `- **ID**: \`${node.id}\``,
+      `- **Type**: ${node.type}`,
+      `- **Status**: ${node.status || 'active'}`,
+      '',
+      node.description || '',
+      '',
+      '### Depends On',
+      ...(deps.length ? deps.map((d) => `- ${d}`) : ['- None']),
+      '',
+      '### Drives',
+      ...(drives.length ? drives.map((d) => `- ${d}`) : ['- None']),
+      '',
+      '---',
+      '',
+    );
+  }
+
+  await writeFile(path.join(runtimeDir, 'topology.md'), topologyLines.join('\n'));
 
   for (const node of session.graph.nodes) {
     const dependsOn = session.graph.links
@@ -309,10 +370,11 @@ async function ensureProjectionUnlocked(session: SessionDocument) {
   }
 
   try {
-    const result = await bridge.ingest(runtimeDir, 'auto', 'replace');
-    if (!result) {
-      await bridge.ingest(path.join(runtimeDir, 'blueprint.json'), 'json', 'replace');
-    }
+    // Ingest ONLY the structural topology — NOT the full runtime directory.
+    // The full dir produces ~791 document-dominated nodes; topology.md gives
+    // ~N blueprint modules with ~M explicit dependency edges.
+    const topoPath = path.join(runtimeDir, 'topology.md');
+    await bridge.ingest(topoPath, 'auto', 'replace');
     preparedSessions.set(session.id, fingerprint);
     lastProjectedSessionId = session.id;
     return { prepared: true, runtimeDir, preparedAt: session.updatedAt };
@@ -558,6 +620,37 @@ export async function analyzeBlueprintGaps(session: SessionDocument): Promise<Bl
   };
 }
 
+/**
+ * Resolve a blueprint node ID to a m1nd-canonical ID via activation.
+ * Blueprint IDs (e.g. "api-gateway") may not match m1nd's canonical IDs
+ * after projection (e.g. "file::topology.md::api-gateway"). This function
+ * uses activate() to find the closest canonical match by label.
+ */
+async function resolveNodeId(
+  nodeId: string,
+  session: SessionDocument,
+  bridge: ReturnType<typeof getM1ndBridge>,
+): Promise<string> {
+  const node = session.graph.nodes.find((n) => n.id === nodeId);
+  if (!node) return nodeId;
+
+  try {
+    const result = await bridge.activate(node.label, 3);
+    const candidates = result?.activated || result?.results || result?.seeds || [];
+    if (candidates.length > 0) {
+      // Prefer exact label match, then closest activation
+      const exact = candidates.find(
+        (c: any) => (c.label || '').toLowerCase() === node.label.toLowerCase(),
+      );
+      const best = exact || candidates[0];
+      return best.node_id || best.external_id || best.id || nodeId;
+    }
+  } catch {
+    // Activation failed — fall through to raw ID
+  }
+  return nodeId;
+}
+
 export async function runSessionAdvancedAction(
   session: SessionDocument,
   action: SessionAdvancedReport['action'],
@@ -584,13 +677,19 @@ export async function runSessionAdvancedAction(
         data = await bridge.metrics(undefined, 15);
         break;
       case 'diagram':
-        data = await bridge.diagram(nodeId, 2, 'mermaid');
+        data = nodeId
+          ? await bridge.diagram(await resolveNodeId(nodeId, session, bridge), 2, 'mermaid')
+          : await bridge.diagram(undefined, 2, 'mermaid');
         break;
       case 'impact':
-        data = nodeId ? await bridge.impact(nodeId) : { error: 'Select a node first.' };
+        data = nodeId
+          ? await bridge.impact(await resolveNodeId(nodeId, session, bridge))
+          : { error: 'Select a node first.' };
         break;
       case 'predict':
-        data = nodeId ? await bridge.predict(nodeId) : { error: 'Select a node first.' };
+        data = nodeId
+          ? await bridge.predict(await resolveNodeId(nodeId, session, bridge))
+          : { error: 'Select a node first.' };
         break;
       default:
         data = { error: 'Unsupported advanced action.' };

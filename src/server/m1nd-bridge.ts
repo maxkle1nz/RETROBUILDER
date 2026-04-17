@@ -324,9 +324,14 @@ export class M1ndBridge extends EventEmitter {
       let blastRadius = null;
       let coChangePredictions = null;
 
-      if (activated?.seeds?.length > 0) {
-        const topNode = activated.seeds[0];
-        const topNodeId = topNode.id || topNode.external_id || topNode.node_id;
+      // m1nd.activate() returns results in multiple formats:
+      // - activated[] or results[] — canonical node IDs (what impact/predict need)
+      // - seeds[] — input query echo (human labels, NOT canonical)
+      // We MUST use the activation results, never seeds, for downstream graph ops.
+      const activatedNodes = activated?.activated || activated?.results || activated?.seeds || [];
+      if (activatedNodes.length > 0) {
+        const topNode = activatedNodes[0];
+        const topNodeId = topNode.node_id || topNode.external_id || topNode.id;
 
         if (topNodeId) {
           const [impactResult, predictResult] = await Promise.allSettled([
@@ -348,7 +353,7 @@ export class M1ndBridge extends EventEmitter {
       }
 
       return {
-        activatedNodes: activated?.seeds || activated?.activated || [],
+        activatedNodes,
         blastRadius,
         coChangePredictions,
         riskScore,
