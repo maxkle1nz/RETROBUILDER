@@ -31,7 +31,8 @@ export type OMXBuildEvent =
   | { type: 'node_complete'; nodeId: string; filesWritten: number; linesWritten: number }
   | { type: 'node_error'; nodeId: string; error: string; retrying: boolean }
   | { type: 'edge_activated'; source: string; target: string }
-  | { type: 'build_complete'; totalFiles: number; totalLines: number; elapsedMs: number };
+  | { type: 'specular_iteration'; nodeId: string; iteration: number; status: 'testing' | 'failing' | 'fixing' | 'passed'; message: string; fixes?: string[] }
+  | { type: 'build_complete'; totalFiles: number; totalLines: number; elapsedMs: number; specular?: { passed: number; total: number; fixesApplied: number; certified: boolean } };
 
 const defaultNodeState = (): BuildNodeState => ({
   status: 'dormant',
@@ -67,7 +68,7 @@ interface BuildStore {
   completedNodes: number;
   nodeStates: Record<string, BuildNodeState>;
   globalLogs: BuildLogEntry[];
-  buildResult: { totalFiles: number; totalLines: number; elapsedMs: number } | null;
+  buildResult: { totalFiles: number; totalLines: number; elapsedMs: number; specularCertified?: boolean } | null;
   activeNodeId: string | null;
 
   startBuild: () => void;
@@ -203,10 +204,35 @@ export const useBuildStore = create<BuildStore>((set, get) => ({
         set({
           isBuilding: false,
           buildProgress: 100,
-          buildResult: { totalFiles: event.totalFiles, totalLines: event.totalLines, elapsedMs: event.elapsedMs },
+          buildResult: {
+            totalFiles: event.totalFiles,
+            totalLines: event.totalLines,
+            elapsedMs: event.elapsedMs,
+            specularCertified: event.specular?.certified,
+          },
           globalLogs: [
             ...state.globalLogs,
-            mkLog(null, 'system', `BUILD COMPLETE — ${event.totalFiles} files · ${event.totalLines} lines · ${(event.elapsedMs / 1000).toFixed(1)}s`),
+            mkLog(null, 'system', `BUILD COMPLETE — ${event.totalFiles} files · ${event.totalLines} lines · ${(event.elapsedMs / 1000).toFixed(1)}s${event.specular ? ` · SPECULAR: ${event.specular.passed}/${event.specular.total} certified (${event.specular.fixesApplied} fixes)` : ''}`),
+          ],
+        });
+        break;
+      }
+      case 'specular_iteration': {
+        const statusIcons: Record<string, string> = {
+          testing: '🔍',
+          failing: '❌',
+          fixing: '🔧',
+          passed: '✅',
+        };
+        const icon = statusIcons[event.status] || '•';
+        set({
+          globalLogs: [
+            ...state.globalLogs,
+            mkLog(
+              event.nodeId,
+              event.status === 'passed' ? 'success' : event.status === 'failing' ? 'error' : 'info',
+              `${icon} SPECULAR [${event.iteration}] ${event.nodeId} — ${event.message}`,
+            ),
           ],
         });
         break;

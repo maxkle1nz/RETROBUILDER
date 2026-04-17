@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
+import { useBuildStore } from '../store/useBuildStore';
 import type { NodeData, KompletusResult, SpecularAuditResult, UserMoment, NodeScreenEntry } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -501,11 +502,24 @@ export default function KompletusReport() {
   if (!showKompletusReport || !result) return null;
 
   const handleAcceptAndContinue = () => {
+    // Apply KOMPLETUS blueprint to the main graph store
     setGraphData(result.graph);
     setManifesto(result.manifesto);
     setArchitecture(result.architecture);
     closeKompletusReport();
-    toast.success(`KOMPLETUS blueprint applied: ${result.graph.nodes.length} modules ready for OMX`);
+
+    // ─── Activate OMX Build Mode ───
+    // Init build node states from the blueprint, then trigger BU1LDER mode.
+    // The useOMXStream hook in BuildView will auto-open the SSE connection
+    // once isBuilding=true + sessionId is available.
+    const { resetBuild, initNodeStates, startBuild } = useBuildStore.getState();
+    const nodeIds = result.graph.nodes.map((n: { id: string }) => n.id);
+    resetBuild();
+    initNodeStates(nodeIds);
+    startBuild();
+    useGraphStore.getState().setAppMode('builder');
+
+    toast.success(`KOMPLETUS → OMX: ${result.graph.nodes.length} modules — Build Mode activated`);
   };
 
   return (

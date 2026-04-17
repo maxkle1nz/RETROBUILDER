@@ -1,6 +1,6 @@
 # Roadmap & Pending Tasks
 
-Progress at v0.6.0: **~92% of original roadmap complete**. Items 3, 4, 6, and 8 are fully closed. Items 1, 2, and 5 have remaining work.
+Progress at v0.6.1: **~95% of original roadmap complete**. Items 3, 4, 6, 8, 9, and 10 are fully closed. Items 1, 2, and 5 have remaining work.
 
 ---
 
@@ -64,7 +64,7 @@ Progress at v0.6.0: **~92% of original roadmap complete**. Items 3, 4, 6, and 8 
 | Sub-item | Severity | Status | Notes |
 |---|---|---|---|
 | Server-Side Cycle Detection | P1 | ✅ Done | `validateGraphIntegrity()` with DAG enforcement (v0.5.0) |
-| OMX Bootstrapping (Phase 0) | P1 | 🟡 Partial | BU1LDER simulation handles it; real OMX needs scaffolding commands |
+| OMX Bootstrapping (Phase 0) | P1 | ✅ Done | KompletusReport → OMX auto-trigger wired (v0.6.1) |
 | Batch Research Queue | P2 | ✅ Done | KOMPLETUS `parallelResearch()` runs all nodes in parallel (v0.6.0) |
 | Donor Logic Checking | P2 | ❌ Pending | Validating incompatible cross-stack logic |
 
@@ -120,3 +120,18 @@ Features shipped that exceeded the original scope:
 
 **No remaining work — KOMPLETUS is feature-complete.**
 
+---
+
+## 10. SPECULAR MODE — Autonomous Agent Evolution ✅ CLOSED (v0.6.1)
+**Objective:** Implement the autonomous test→diagnose→fix→retest loop per node during OMX materialization.
+
+| Sub-item | Status | Notes |
+|---|---|---|
+| Mirror Test Engine | ✅ Done | LLM-validated AC + data contract check per node |
+| SPECULAR Loop (up to 3 iterations) | ✅ Done | test→fail→diagnose→fix→retest in omx-runner.ts |
+| SSE Events (specular_iteration) | ✅ Done | Real-time UIX feedback during SPECULAR iterations |
+| Build Console Integration | ✅ Done | useBuildStore handles specular_iteration with status icons |
+| KompletusReport → OMX Wiring | ✅ Done | "Accept & Continue" triggers full OMX build pipeline |
+| SPECULAR Certification in build_complete | ✅ Done | certified boolean + fixes count in final SSE event |
+
+**No remaining work — SPECULAR MODE is fully integrated into the OMX pipeline.**
