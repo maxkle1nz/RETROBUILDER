@@ -18,8 +18,8 @@ As of v0.6.1 (2026-04-17), the following features and components are implemented
 - **Keyboard Shortcuts:** ⌘Z (undo), ⌘⇧Z (redo), Esc (close panels), ⌘1/⌘2/⌘3 (mode switch), ⌘S (save session).
 - **Error Boundaries:** App-level and GraphView-level boundaries prevent white-screen crashes.
 - **Persistent State:** `zustand/persist` saves graph, manifesto, architecture, and mode to `localStorage`.
-- **Priority Badges:** P1/P2/P3 build order indicators rendered on CyberNode components.
-- **AC Indicators:** Acceptance criteria count displayed on each node.
+- **Priority & Status Demystifier Chips:** P1/P2/P3 build order indicators and explicit `PENDING` / `ACTIVE` / `DONE` chips rendered on CyberNode components.
+- **Demystifier Metrics Grid:** Every m1ndmap node now exposes compact AC / EH / CTR / RCH summary slots instead of stacked metadata strips.
 - **OMX Export Button:** "Export to OMX" in the RightPanel generates a downloadable `.omx/plan.md` for autonomous materialization and activates Build Mode.
 - **BU1LDER Mode:** Live construction environment with CyberNodeBuild animations, BuildConsole, BuildView, Build Tracker Checklist, SSE Streaming.
 - **KOMPLETUS Report Modal:** Full-screen report with tabs: Modules, Artifacts, Specular, Summary. "Accept & Continue" triggers zero-click flow into BU1LDER mode.

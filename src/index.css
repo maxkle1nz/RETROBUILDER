@@ -137,3 +137,40 @@
   0%, 100% { box-shadow: 0 0 4px var(--color-accent); }
   50% { box-shadow: 0 0 12px var(--color-accent); }
 }
+
+/* ── NodeInspector shared input tokens ───────────────────────────────────── */
+.inspector-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--color-text-main);
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+.inspector-input:focus {
+  border-color: var(--color-accent);
+}
+
+.inspector-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--color-text-main);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s;
+  font-family: inherit;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+.inspector-textarea:focus {
+  border-color: var(--color-accent);
+}

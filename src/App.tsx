@@ -14,9 +14,13 @@ import ErrorBoundary from './components/ErrorBoundary';
 import SessionLauncher from './components/SessionLauncher';
 import EnvConfigModal from './components/EnvConfigModal';
 import KompletusReport from './components/KompletusReport';
+import BuildConsole from './components/BuildConsole';
+import SpotlightSearch from './components/SpotlightSearch';
+import NodeInspector from './components/NodeInspector';
 import { useGraphStore } from './store/useGraphStore';
+import { useBuildStore } from './store/useBuildStore';
 import { fetchEnvConfig, listSessions, loadSession, registerModelGetter, saveSession } from './lib/api';
-import { BrainCircuit, FolderOpen, KeyRound, PenTool, PanelRightClose, PanelLeftClose, Save, Hammer } from 'lucide-react';
+import { BrainCircuit, FolderOpen, KeyRound, PenTool, PanelRightClose, PanelLeftClose, Save, Hammer, TerminalSquare } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Toaster, toast } from 'sonner';
 
@@ -54,8 +58,16 @@ export default function App() {
     openEnvConfigModal,
     setSessionSaveState,
   } = useGraphStore();
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [leftCollapsed, setLeftCollapsed]   = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [showSpotlight, setShowSpotlight]   = useState(false);
+  const [terminalOpen, setTerminalOpen]     = useState(false);
+
+  // Auto-open terminal when OMX build starts
+  const isBuilding = useBuildStore((s) => s.isBuilding);
+  useEffect(() => {
+    if (isBuilding) setTerminalOpen(true);
+  }, [isBuilding]);
 
   const totalNodes = graphData.nodes.length;
   const completedNodes = graphData.nodes.filter(n => n.status === 'completed').length;
@@ -207,6 +219,12 @@ export default function App() {
       if (e.key === 'Escape') {
         useGraphStore.getState().closeRightPanel();
         useGraphStore.getState().setSelectedNode(null);
+        setShowSpotlight(false);
+      }
+      // ⌘+K — Spotlight Search
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowSpotlight((prev) => !prev);
       }
       // ⌘+1 — Architect mode
       if ((e.metaKey || e.ctrlKey) && e.key === '1') {
@@ -331,6 +349,19 @@ export default function App() {
           </div>
 
           <div className="flex gap-5 text-[11px] text-text-dim items-center font-mono">
+            {/* Terminal toggle */}
+            <button
+              onClick={() => setTerminalOpen((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded border transition-colors ${
+                terminalOpen
+                  ? 'border-accent/50 text-accent bg-accent/10'
+                  : 'border-border-subtle bg-black/40 hover:border-accent hover:text-white'
+              }`}
+              title="Toggle OMX Terminal (⌘T)"
+            >
+              <TerminalSquare size={12} />
+              {isBuilding && <span className="w-1.5 h-1.5 rounded-full bg-[#ffcb6b] animate-pulse" />}
+            </button>
             <button
               onClick={handleManualSave}
               disabled={!activeSessionId || sessionSaveState === 'saving'}
@@ -418,11 +449,20 @@ export default function App() {
             )}
           </AnimatePresence>
         </div>
-        
+
+        <BuildConsole drawerMode open={terminalOpen} onClose={() => setTerminalOpen(false)} />
         <ChatFooter />
         <SessionLauncher />
         <EnvConfigModal />
         <KompletusReport />
+        <NodeInspector />
+
+        {/* Spotlight Search (portalled over everything) */}
+        <AnimatePresence>
+          {showSpotlight && (
+            <SpotlightSearch onClose={() => setShowSpotlight(false)} />
+          )}
+        </AnimatePresence>
       </div>
     </ErrorBoundary>
   );

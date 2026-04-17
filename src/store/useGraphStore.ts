@@ -47,6 +47,9 @@ interface GraphState {
   highlightedNodes: Set<string>;
   highlightSource: string | null; // which node triggered the highlight
 
+  // Spotlight: signals GraphView to center on this node
+  focusNodeId: string | null;
+
   // Multi-select for batch operations
   selectedNodes: Set<string>;
 
@@ -72,6 +75,8 @@ interface GraphState {
   addLink: (link: LinkData) => void;
   setHighlightedNodes: (nodeIds: string[], source: string | null) => void;
   clearHighlightedNodes: () => void;
+  setFocusNodeId: (id: string) => void;
+  clearFocusNodeId: () => void;
   toggleNodeSelection: (nodeId: string) => void;
   clearNodeSelection: () => void;
   setSelectedNodes: (nodeIds: string[]) => void;
@@ -98,6 +103,11 @@ interface GraphState {
   addKompletusProgress: (event: KompletusEvent) => void;
   clearKompletusProgress: () => void;
   updateKompletusNode: (nodeId: string, updates: Partial<NodeData>) => void;
+
+  // Node Inspector
+  inspectorNodeId: string | null;
+  openInspector: (nodeId: string) => void;
+  closeInspector: () => void;
 }
 
 export const useGraphStore = create<GraphState>()(
@@ -123,6 +133,7 @@ export const useGraphStore = create<GraphState>()(
         isRightPanelOpen: false,
         highlightedNodes: new Set<string>(),
         highlightSource: null,
+        focusNodeId: null,
         selectedNodes: new Set<string>(),
         activeProvider: 'xai',
         activeModel: null,
@@ -132,6 +143,7 @@ export const useGraphStore = create<GraphState>()(
         kompletusResult: null,
         kompletusProgress: [],
         isKompletusRunning: false,
+        inspectorNodeId: null,
         setGraphData: (data) => set((state) => ({
           graphData: data,
           sessionSaveState: state.activeSessionId ? 'dirty' : state.sessionSaveState,
@@ -197,6 +209,8 @@ export const useGraphStore = create<GraphState>()(
           highlightedNodes: new Set<string>(),
           highlightSource: null
         }),
+        setFocusNodeId: (id) => set({ focusNodeId: id }),
+        clearFocusNodeId: () => set({ focusNodeId: null }),
         toggleNodeSelection: (nodeId) => set((state) => {
           const next = new Set(state.selectedNodes);
           if (next.has(nodeId)) {
@@ -279,6 +293,8 @@ export const useGraphStore = create<GraphState>()(
             },
           };
         }),
+        openInspector: (nodeId) => set({ inspectorNodeId: nodeId }),
+        closeInspector: () => set({ inspectorNodeId: null }),
       }),
       {
         partialize: (state) => ({

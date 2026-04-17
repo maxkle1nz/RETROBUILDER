@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
 import { performDeepResearch } from '../lib/api';
 import { toast } from 'sonner';
-import { Trash2, Edit3, CheckCircle2, PlayCircle, Circle, Copy, Search, Layers } from 'lucide-react';
+import { Trash2, Edit3, CheckCircle2, PlayCircle, Circle, Copy, Search, Layers, Network, PanelRight } from 'lucide-react';
 
 interface ContextMenuProps {
   x: number;
@@ -13,7 +13,7 @@ interface ContextMenuProps {
 }
 
 export default function NodeContextMenu({ x, y, nodeId, nodeLabel, onClose }: ContextMenuProps) {
-  const { removeNode, updateNode, setSelectedNode, graphData, selectedNodes, toggleNodeSelection, projectContext } = useGraphStore();
+  const { removeNode, updateNode, setSelectedNode, graphData, selectedNodes, toggleNodeSelection, projectContext, openInspector } = useGraphStore();
   const [isRenaming, setIsRenaming] = useState(false);
   const [newLabel, setNewLabel] = useState(nodeLabel);
   const [isResearching, setIsResearching] = useState(false);
@@ -117,6 +117,9 @@ export default function NodeContextMenu({ x, y, nodeId, nodeLabel, onClose }: Co
   const menuItems = [
     { icon: Search, label: isResearching ? 'Grounding...' : 'Deep Research', action: handleResearch, color: 'text-accent', disabled: isResearching },
     ...(batchCount > 1 ? [{ icon: Layers, label: `Research Selected (${batchCount})`, action: handleBatchResearch, color: 'text-[#b026ff]', disabled: isResearching }] : []),
+    { divider: true },
+    { icon: PanelRight, label: 'Open Inspector', action: () => { openInspector(nodeId); onClose(); }, color: 'text-[#00f2ff]' },
+    { icon: Network, label: 'Connect to…', action: () => { openInspector(nodeId); onClose(); }, color: 'text-[#00ff66]' },
     { divider: true },
     { icon: Edit3, label: 'Rename', action: () => setIsRenaming(true), color: 'text-accent' },
     { icon: Copy, label: 'Duplicate', action: handleDuplicate, color: 'text-text-dim' },
