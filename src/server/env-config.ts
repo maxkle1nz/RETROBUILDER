@@ -7,6 +7,9 @@ export type EnvConfigKey =
   | 'AI_PROVIDER'
   | 'XAI_API_KEY'
   | 'XAI_MODEL'
+  | 'GEMINI_API_KEY'
+  | 'GEMINI_API_KEYS'
+  | 'GEMINI_MODEL'
   | 'OPENAI_API_KEY'
   | 'OPENAI_MODEL'
   | 'THEBRIDGE_URL'
@@ -27,6 +30,8 @@ export interface EnvConfigState {
 
 const SECRET_KEYS: EnvConfigKey[] = [
   'XAI_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_API_KEYS',
   'OPENAI_API_KEY',
   'THEBRIDGE_HTTP_TOKEN',
   'PERPLEXITY_API_KEY',
@@ -39,6 +44,9 @@ const CONFIG_KEYS: EnvConfigKey[] = [
   'AI_PROVIDER',
   'XAI_API_KEY',
   'XAI_MODEL',
+  'GEMINI_API_KEY',
+  'GEMINI_API_KEYS',
+  'GEMINI_MODEL',
   'OPENAI_API_KEY',
   'OPENAI_MODEL',
   'THEBRIDGE_URL',

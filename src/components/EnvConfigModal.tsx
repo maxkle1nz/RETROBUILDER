@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 
 const SECRET_FIELDS = [
   'XAI_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_API_KEYS',
   'OPENAI_API_KEY',
   'THEBRIDGE_HTTP_TOKEN',
   'PERPLEXITY_API_KEY',
@@ -17,6 +19,7 @@ const SECRET_FIELDS = [
 
 const TEXT_FIELDS = [
   'XAI_MODEL',
+  'GEMINI_MODEL',
   'OPENAI_MODEL',
   'THEBRIDGE_URL',
   'THEBRIDGE_MODEL',
@@ -58,6 +61,7 @@ export default function EnvConfigModal() {
       setForm({
         AI_PROVIDER: nextState.config.AI_PROVIDER || 'xai',
         XAI_MODEL: nextState.config.XAI_MODEL || '',
+        GEMINI_MODEL: nextState.config.GEMINI_MODEL || '',
         OPENAI_MODEL: nextState.config.OPENAI_MODEL || '',
         THEBRIDGE_URL: nextState.config.THEBRIDGE_URL || '',
         THEBRIDGE_MODEL: nextState.config.THEBRIDGE_MODEL || '',
@@ -182,6 +186,7 @@ export default function EnvConfigModal() {
                     className="mt-2 w-full bg-bg border border-border-subtle rounded px-3 py-2 text-sm text-text-main outline-none focus:border-accent"
                   >
                     <option value="xai">xAI</option>
+                    <option value="gemini">Google Gemini</option>
                     <option value="bridge">THE BRIDGE</option>
                     <option value="openai">OpenAI</option>
                   </select>

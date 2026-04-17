@@ -71,7 +71,7 @@ XAI_API_KEY="xai-..."
 
 # .env.local — Bridge example (zero-config local)
 AI_PROVIDER="bridge"
-BRIDGE_URL="http://127.0.0.1:7788/v1"
+THEBRIDGE_URL="http://127.0.0.1:7788/v1"
 ```
 
 You can switch providers at runtime via the Model Selector panel in the UI — no restart needed.
