@@ -52,18 +52,6 @@ async function startServer() {
   app.use(createM1ndRouter());
   app.use(createOmxRouter());
 
-  // Pre-warm a specific model connection (called when user selects a model in UI)
-  app.post("/api/ai/warmup", (req, res) => {
-    const { model } = req.body;
-    const provider = getActiveProvider();
-    if (provider.warmModel) {
-      provider.warmModel(model).catch(() => {});
-      res.json({ status: 'warming', model: model || provider.defaultModel });
-    } else {
-      res.json({ status: 'not_needed', provider: provider.name });
-    }
-  });
-
   // Apply rate limiting to all AI endpoints
   app.use("/api/ai", aiLimiter);
   app.use(createAiRouter());

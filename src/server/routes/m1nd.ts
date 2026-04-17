@@ -71,10 +71,31 @@ export function createM1ndRouter() {
     res.json(result || { error: 'm1nd offline' });
   });
 
+  router.post('/api/m1nd/search', async (req, res) => {
+    const { query, mode, top_k } = req.body;
+    if (!query) return res.status(400).json({ error: "Missing 'query'" });
+    const result = await getM1ndBridge().search(query, mode || 'semantic', top_k || 20);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  router.post('/api/m1nd/missing', async (req, res) => {
+    const { query } = req.body;
+    if (!query) return res.status(400).json({ error: "Missing 'query'" });
+    const result = await getM1ndBridge().missing(query);
+    res.json(result || { error: 'm1nd offline' });
+  });
+
   router.post('/api/m1nd/ingest', async (req, res) => {
     const { path: codePath, adapter, mode } = req.body;
     if (!codePath) return res.status(400).json({ error: "Missing 'path'" });
     const result = await getM1ndBridge().ingest(codePath, adapter || 'code', mode || 'replace');
+    res.json(result || { error: 'm1nd offline' });
+  });
+
+  router.post('/api/m1nd/structural-context', async (req, res) => {
+    const { file_path, symbol } = req.body;
+    if (!file_path) return res.status(400).json({ error: "Missing 'file_path'" });
+    const result = await getM1ndBridge().surgicalContext(file_path, symbol);
     res.json(result || { error: 'm1nd offline' });
   });
 
