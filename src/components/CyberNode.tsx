@@ -29,6 +29,8 @@ const FALLBACK_TYPE = { color: 'var(--color-text-dim)', Icon: Server, label: 'Mo
 export default function CyberNode({ data, selected }: CyberNodeData) {
   const highlightedNodes = useGraphStore((s) => s.highlightedNodes);
   const highlightSource  = useGraphStore((s) => s.highlightSource);
+  const setSelectedNode  = useGraphStore((s) => s.setSelectedNode);
+  const openRightPanel   = useGraphStore((s) => s.openRightPanel);
 
   const isHighlighted = highlightedNodes.has(data.id);
   const isBlastSource = highlightSource === data.id;
@@ -125,12 +127,20 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
         </div>
 
         {hasResearch && (
-          <div className="flex items-center justify-between px-2 py-1 bg-[#b026ff]/10 border border-[#b026ff]/30 rounded-[6px]">
-             <span className="text-[9px] font-medium tracking-wide text-[#b026ff] uppercase flex items-center gap-1.5">
-               <FlaskConical size={10} /> Deep Grounding Active
-             </span>
-             <span className="text-[8px] text-[#b026ff]/70 tracking-wider">CLICK TO EXPAND</span>
-          </div>
+          <button
+            className="w-full flex items-center justify-between px-2 py-1.5 bg-[#b026ff]/10 border border-[#b026ff]/30 rounded-[6px] hover:bg-[#b026ff]/20 hover:border-[#b026ff]/60 transition-colors cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedNode(data);
+              openRightPanel();
+            }}
+            title="Open Deep Grounding panel"
+          >
+            <span className="text-[9px] font-medium tracking-wide text-[#b026ff] uppercase flex items-center gap-1.5">
+              <FlaskConical size={10} /> Deep Grounding Active
+            </span>
+            <span className="text-[8px] text-[#b026ff]/70 tracking-wider">CLICK TO EXPAND →</span>
+          </button>
         )}
 
         {/* Row 3: Readable indicator pills */}
