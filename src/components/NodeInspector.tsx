@@ -394,8 +394,10 @@ function GroundingTab({
   updateNode: (id: string, u: Partial<NodeData>) => void;
   typeColor: string;
 }) {
-  const [localVal, setLocalVal] = useState(node.researchContext ?? '');
-  const [saved, setSaved]       = useState(false);
+  const projectContext = useGraphStore((s) => s.projectContext);
+  const [localVal, setLocalVal]       = useState(node.researchContext ?? '');
+  const [saved, setSaved]             = useState(false);
+  const [researching, setResearching] = useState(false);
 
   useEffect(() => { setLocalVal(node.researchContext ?? ''); }, [node.id, node.researchContext]);
 
@@ -405,15 +407,56 @@ function GroundingTab({
     setTimeout(() => setSaved(false), 1800);
   }
 
+  async function handleDeepResearch() {
+    setResearching(true);
+    try {
+      const { performDeepResearch } = await import('../lib/api');
+      const result = await performDeepResearch(node, projectContext);
+      setLocalVal(result);
+      updateNode(node.id, { researchContext: result });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
+    } catch {
+      // toast handled by caller if needed
+    } finally {
+      setResearching(false);
+    }
+  }
+
   const hasGrounding = Boolean(node.researchContext?.trim());
 
   return (
     <div className="p-4 space-y-4">
-      {!hasGrounding && (
-        <div className="px-3 py-3 bg-[#b026ff]/8 border border-[#b026ff]/20 rounded-[8px] text-[9.5px] text-[#b026ff]/70 text-center">
-          No deep grounding yet. Paste research notes or run Deep Research from the session panel.
+      {/* Deep Research action button */}
+      <button
+        onClick={handleDeepResearch}
+        disabled={researching}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-[8px] border text-[9px] font-bold uppercase tracking-wider transition-all disabled:opacity-60"
+        style={{
+          color: '#b026ff',
+          borderColor: researching ? '#b026ff66' : '#b026ff44',
+          background: researching ? '#b026ff18' : '#b026ff10',
+        }}
+      >
+        {researching ? (
+          <>
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#b026ff] animate-pulse" />
+            Grounding in progress…
+          </>
+        ) : (
+          <>
+            <FlaskConical size={11} />
+            Run Deep Research
+          </>
+        )}
+      </button>
+
+      {!hasGrounding && !researching && (
+        <div className="px-3 py-2.5 bg-[#b026ff]/8 border border-[#b026ff]/20 rounded-[8px] text-[9.5px] text-[#b026ff]/70 text-center leading-relaxed">
+          No deep grounding yet. Click above to auto-research, or paste notes manually.
         </div>
       )}
+
       <Field label="Research Context">
         <textarea
           value={localVal}
@@ -423,6 +466,7 @@ function GroundingTab({
           style={{ borderColor: hasGrounding ? '#b026ff44' : undefined }}
         />
       </Field>
+
       <button
         onClick={handleSave}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border text-[9px] font-bold uppercase tracking-wider transition-all"
