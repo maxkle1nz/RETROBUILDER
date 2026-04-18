@@ -1,120 +1,140 @@
 # m1nd Integration Guide
 
-The `m1nd` system is a neuro-symbolic code graph engine. It ingests codebases into a weighted graph and provides spreading-activation queries, impact analysis, prediction, and stateful perspective navigation.
+RETROBUILDER uses m1nd in two layers:
+1. a raw HTTP bridge for direct graph operations
+2. a session-projected analysis layer that aligns the active blueprint draft with m1nd before computing readiness, impact, gaps, and advanced analysis
 
-## Architecture
+## 1. Raw m1nd Architecture
 
-```
-┌──────────────────────┐
-│  Frontend (React)    │
-│  M1ndClient class    │──── HTTP ────┐
-│  src/lib/m1nd.ts     │              │
-└──────────────────────┘              ▼
-                            ┌──────────────────────┐
-                            │  Express Backend     │
-                            │  /api/m1nd/* routes  │
-                            │  server.ts           │
-                            └──────────┬───────────┘
-                                       │
-                              JSON-RPC 2.0 (stdio)
-                                       │
-                            ┌──────────▼───────────┐
-                            │  m1nd-mcp process    │
-                            │  M1ndBridge class    │
-                            │  m1nd-bridge.ts      │
-                            └──────────────────────┘
+```text
+Frontend (src/lib/m1nd.ts)
+    -> /api/m1nd/*
+Express router (src/server/routes/m1nd.ts)
+    -> M1ndBridge (src/server/m1nd-bridge.ts)
+    -> m1nd-mcp stdio child process
 ```
 
-### How It Works
+### How it works
+- The backend auto-spawns `m1nd-mcp` when available in PATH.
+- The frontend never talks to m1nd directly; it uses normal HTTP fetches.
+- All raw m1nd client methods degrade gracefully to `null` or offline status.
 
-1. **The Bridge:** The Express server spawns `m1nd-mcp` as a child process. Communication is via JSON-RPC 2.0 over stdin/stdout (MCP stdio transport). The `M1ndBridge` class (`src/server/m1nd-bridge.ts`) manages the process lifecycle, auto-reconnection, and request queueing.
-2. **The Client:** The frontend (`src/lib/m1nd.ts`) talks to the server at `/api/m1nd/*` endpoints via standard HTTP fetch. No WebSocket required.
-3. **The UI:** The Right Panel in "M1ND Mode" provides action buttons and displays results. RightPanel also handles blast radius highlighting on the graph canvas.
+## 2. Session-Projected Architecture
 
-## Prerequisites
+This is the more important integration for current RETROBUILDER behavior.
 
-The m1nd MCP binary must be available in the system PATH:
-
-```bash
-# Verify m1nd is installed
-which m1nd-mcp
-
-# The server auto-spawns m1nd-mcp — no manual proxy needed
-npm run dev
+```text
+Active session/draft
+    -> session projection
+    -> projected analysis in m1nd
+    -> session routes
+    -> M1ND cockpit / ARCHITECT handoff / KOMPLETUS grounding
 ```
 
-> **Note:** Unlike earlier versions, there is no WebSocket proxy to run manually. The Express backend manages the m1nd process directly via stdio.
+Active files:
+- `src/server/session-projection.ts`
+- `src/server/session-analysis.ts`
+- `src/server/routes/sessions.ts`
+- `src/components/RightPanel.tsx`
+- `src/components/ChatFooter.tsx`
 
-## Available API Endpoints
+### What the projection layer does
+- normalizes the active session or draft into a compact m1nd-friendly workspace projection
+- keeps research blobs stripped when structural topology is the target
+- allows the M1ND cockpit to talk about the blueprint the user is editing now, not some unrelated donor graph
 
-| Endpoint | m1nd Tool | Description |
-|---|---|---|
-| `GET /api/m1nd/health` | `health` | Connection status, node/edge counts |
-| `POST /api/m1nd/activate` | `activate` | Spreading activation query |
-| `POST /api/m1nd/impact` | `impact` | Blast radius / impact analysis |
-| `POST /api/m1nd/predict` | `predict` | Co-change prediction |
-| `POST /api/m1nd/validate` | `validate_plan` | Validate a modification plan |
-| `POST /api/m1nd/diagram` | `diagram` | Generate Mermaid/DOT diagrams |
-| `POST /api/m1nd/layers` | `layers` | Auto-detect architectural layers |
-| `POST /api/m1nd/metrics` | `metrics` | Structural codebase metrics |
-| `POST /api/m1nd/panoramic` | `panoramic` | Panoramic risk overview |
-| `POST /api/m1nd/search` | `search` | Unified code search |
-| `POST /api/m1nd/hypothesize` | `hypothesize` | Structural hypothesis testing |
-| `POST /api/m1nd/missing` | `missing` | Structural hole detection |
-| `POST /api/m1nd/ingest` | `ingest` | Ingest/re-ingest a codebase |
-| `POST /api/m1nd/structural-context` | `surgical_context_v2` | Full surgical context for editing |
+## 3. Raw HTTP Endpoints
 
-## Structural Injection (Kreator Integration)
+Current raw endpoints in `src/server/routes/m1nd.ts`:
 
-When generating proposals, the Kreator subsystem pre-fetches structural context from m1nd:
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/m1nd/health` | health / node-edge counts |
+| `POST /api/m1nd/activate` | spreading activation |
+| `POST /api/m1nd/impact` | blast radius |
+| `POST /api/m1nd/predict` | co-change prediction |
+| `POST /api/m1nd/hypothesize` | structural claim testing |
+| `POST /api/m1nd/validate-plan` | plan validation |
+| `POST /api/m1nd/panoramic` | panoramic risk view |
+| `POST /api/m1nd/diagram` | Mermaid diagram generation |
+| `POST /api/m1nd/layers` | architectural layers |
+| `POST /api/m1nd/metrics` | structural metrics |
+| `POST /api/m1nd/search` | unified search |
+| `POST /api/m1nd/missing` | structural-hole hints |
+| `POST /api/m1nd/ingest` | codebase ingest |
+| `POST /api/m1nd/structural-context` | surgical context |
+| `POST /api/m1nd/document/resolve` | document artifact resolution |
+| `POST /api/m1nd/document/bindings` | document-to-code bindings |
+| `POST /api/m1nd/document/drift` | document/code drift |
 
-1. `activate(query)` — Find relevant nodes for the user's request
-2. `impact(node)` — Blast radius of affected components
-3. `predict(node)` — Co-change likelihood for each module
-4. Results are injected into the LLM prompt as structural grounding
+## 4. Session Route Surfaces
 
-This ensures AI proposals are **structurally aware** — they don't suggest changes that would break hidden dependencies.
+Current session-backed analysis surfaces:
+- `POST /api/sessions/:id/activate`
+- `POST /api/sessions/:id/readiness`
+- `POST /api/sessions/:id/impact`
+- `POST /api/sessions/:id/gaps`
+- `POST /api/sessions/:id/advanced`
 
-## Graceful Degradation
+These routes are what power the M1ND cockpit in the UI.
 
-All m1nd methods return `null` on failure. If m1nd is unavailable:
-- The Kreator generates proposals without structural grounding (still functional)
-- The RightPanel shows "Disconnected" status
-- Health checks run every 15 seconds and auto-reconnect when available
+## 5. Current UI Surfaces
 
-## UI Actions (RightPanel in M1ND Mode)
+### ChatFooter in M1ND mode
+- switches the footer prompt into m1nd query mode
+- sends the active session draft to `activateSessionDraft(...)`
+- uses projected activation, not only raw graph access
 
-| Button | Action | Visual Feedback |
-|---|---|---|
-| 💥 Impact | `m1nd.impact(nodeId)` | Red pulse on origin, orange glow on impact zone |
-| 🔮 Predict | `m1nd.predict(nodeId)` | Results displayed in panel |
-| ✅ Validate | `m1nd.validate(plan)` | Risk score and gap analysis |
-| 📊 Layers | `m1nd.layers()` | Architectural layer breakdown |
-| 📈 Metrics | `m1nd.metrics()` | LOC, complexity, PageRank per file |
-| 🗺️ Diagram | `m1nd.diagram(nodeId)` | Mermaid diagram output |
+### RightPanel / M1ND cockpit
+Current tabs:
+- Ready
+- Impact
+- Gaps
+- Grounding
+- Advanced
 
-## Frontend Client API (`M1ndClient`)
+What they mean:
+- Ready -> export/readiness truth for the current blueprint
+- Impact -> projected upstream/downstream/changed-together analysis
+- Gaps -> missing AC / contracts / error handling / semantic hints
+- Grounding -> research report for a selected node
+- Advanced -> raw/near-raw health, layers, metrics, diagram, impact, predict output
 
-```typescript
-import { m1nd } from '../lib/m1nd';
+## 6. Structural Injection in KREATOR
 
-// Health check
-const status = await m1nd.health();     // { connected, nodeCount, edgeCount, graphState }
-const ok = await m1nd.isConnected();    // boolean
+`generateProposalWorkflow()` in `src/server/ai-workflows.ts` gathers structural context from m1nd before synthesizing a proposal.
 
-// Foundation
-await m1nd.activate(query, topK);       // Spreading activation
-await m1nd.impact(nodeId, direction);   // Blast radius
-await m1nd.predict(changedNode, topK);  // Co-change prediction
+Current injected context may include:
+- activated nodes
+- blast radius
+- co-change predictions
+- risk assessment
+- layer violations
 
-// Superpowers
-await m1nd.hypothesize(claim);          // Structural hypothesis testing
-await m1nd.validate(actions);           // Plan validation
-await m1nd.missing(query);             // Structural hole detection
+This means proposal generation is structurally aware when m1nd is online, but still degrades gracefully when it is offline.
 
-// Visualization
-await m1nd.diagram(center, depth);      // Mermaid diagram
-await m1nd.layers();                    // Architectural layers
-await m1nd.metrics(scope);             // Codebase metrics
-await m1nd.panoramic();                // Risk overview
-```
+## 7. Deep Research Enrichment
+
+`performDeepResearchWorkflow()` also uses m1nd when available.
+
+Current enrichment path:
+- `documentBindings(...)`
+- `documentDrift(...)`
+
+That creates a bridge between:
+- web/document research
+- blueprint node intent
+- probable code/document bindings
+
+## 8. Operational Truth
+
+What is true today:
+- m1nd is backend-managed and auto-spawned when available.
+- The important operator surface is session-projected analysis, not raw endpoint sprawl.
+- Raw endpoints still exist for direct graph work and diagnostics.
+- The M1ND cockpit already surfaces blocker truth honestly (for example `EMPTY_BLUEPRINT` on a blank session).
+
+## 9. Known Current Gaps
+
+- The full browser-level visual journey from blueprint generation -> projected m1nd analysis -> KOMPLETUS -> OMX build is not yet automated as one end-to-end specular test.
+- Some legacy documentation and builder-store surfaces still mention SPECULAR loop behavior that belongs to `omx-runner.ts`, while the active routed OMX runtime is `omx-runtime.ts`.

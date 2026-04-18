@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Docs Truth Alignment** — README and docs now reflect the active runtime architecture on `main` instead of older mixed assumptions.
+- **OMX Runtime Truth** — the docs now treat `src/server/omx-runtime.ts` + `src/server/routes/omx.ts` as the active build lifecycle path.
+- **Specular Honesty** — docs now distinguish between the real KOMPLETUS Specular audit/report contract and the still-open convergence work around legacy builder-side SPECULAR loop expectations.
+- **m1nd Truth** — docs now describe the session-projected M1ND cockpit flow alongside the raw `/api/m1nd/*` bridge.
+
 ## [0.6.1] — 2026-04-17
 
 ### Added

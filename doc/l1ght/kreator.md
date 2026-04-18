@@ -4,58 +4,71 @@ Node: kreator-subsystem
 State: ◉ operational
 Color: #00ffcc
 Glyph: ⚡
-Completeness: 85%
+Completeness: 88%
 Proof: structural
 Depends on:
-  - express-server
-  - ai-provider-factory
-  - web-research-service
-  - m1nd-bridge
+  - src/components/ChatFooter.tsx
+  - src/server/routes/ai.ts
+  - src/server/ai-workflows.ts
+  - src/server/m1nd-bridge.ts
 Next:
-  - autopilot-loop
-  - multi-agent-kreator
+  - full-journey visual dogfood
+  - tighter proposal-to-proof ergonomics
 ---
 
 ## Overview
 
-[⍂ entity: Kreator] is the primary [⍌ event: graph-modification] engine within RETROBUILDER. It operates in two modes:
+[⌂ entity: Kreator] is the prompt-driven blueprint authoring subsystem inside RETROBUILDER.
 
-1. **KONSTRUKTOR** — generates initial system skeletons from natural language prompts
-2. **KREATOR** — modifies existing graph topology via proposal → review → execute pipeline
+It currently operates in two practical authoring modes:
+1. **KONSTRUKTOR** — generate the initial blueprint skeleton
+2. **KREATOR** — propose and apply graph modifications against an existing blueprint
 
 [⟁ binds_to: src/components/ChatFooter.tsx]
-[⟁ binds_to: server.ts:generateProposal]
-[⟁ binds_to: server.ts:applyProposal]
+[⟁ binds_to: src/server/routes/ai.ts]
+[⟁ binds_to: src/server/ai-workflows.ts]
 
-## Structural Awareness (M1ND Integration)
+## Current Flow
 
-[⍐ state: m1nd-grounded] — As of v2.6, the Kreator is structurally grounded. Before generating any proposal, the backend:
+### KONSTRUKTOR
+1. User enters a natural-language prompt in `ChatFooter`
+2. `generateGraphStructureWorkflow(...)` creates the initial graph, manifesto, and architecture
+3. The graph is written into the frontend store and rendered on the m1ndmap canvas
 
-1. Calls `m1nd.activate(prompt)` to identify affected graph nodes
-2. Calls `m1nd.impact(top_node)` to compute blast radius
-3. Calls `m1nd.predict(top_node)` to get co-change predictions
-4. Injects all structural context into the LLM system prompt
+### KREATOR
+1. User requests a modification in `ChatFooter`
+2. `generateProposalWorkflow(...)` synthesizes a concise technical plan
+3. User explicitly reviews the proposal
+4. `applyProposalWorkflow(...)` mutates the graph when accepted
+
+This is still a human-approved proposal pipeline, not a hidden multi-step autopilot loop.
+
+## Structural Awareness (m1nd Integration)
+
+[⟐ state: m1nd-grounded]
+
+When m1nd is online, `generateProposalWorkflow(...)` gathers structural context before proposal synthesis.
+
+Current injected context can include:
+- activated nodes
+- blast radius
+- co-change predictions
+- risk assessment
+- layer violations
+
+This makes KREATOR structurally aware instead of only prompt-reactive.
 
 [⟁ depends_on: src/server/m1nd-bridge.ts]
-[⟁ binds_to: server.ts:gatherStructuralContext]
+[⟁ binds_to: src/server/ai-workflows.ts::generateProposalWorkflow]
 
-## Proposal Pipeline
+## Relationship to KOMPLETUS
 
-The proposal pipeline follows a strict sequence:
+KREATOR and KOMPLETUS are adjacent but different:
+- **KREATOR** = incremental user-reviewed graph modification
+- **KOMPLETUS** = full pipeline from prompt -> research -> specular audit -> quality gate -> report
 
-1. **User Prompt** → ChatFooter captures input
-2. **Structural Context** → m1nd bridge gathers topology data
-3. **LLM Synthesis** → Provider generates proposal with structural awareness  
-4. **User Review** → Proposal displayed with Accept/Reject controls
-5. **Execution** → Graph mutated via `applyProposal` endpoint
-
-[𝔻 confidence: 0.90] — The pipeline is battle-tested for single-step proposals.
-[𝔻 ambiguity: 0.15] — Multi-step proposals may lose context between iterations.
-
-## Risk Surface
-
-[RED blocker: autopilot-loop-missing] — No automated multi-step execution loop exists yet.
-[AMBER warning: m1nd-offline-degradation] — When m1nd is unavailable, proposals lack structural grounding.
+For full autonomous handoff into OMX, the current preferred flow is:
+`KONSTRUKTOR/KOMPLETUS -> review -> Accept & Continue -> OMX runtime`
 
 ## Data Contracts
 
@@ -66,8 +79,30 @@ The proposal pipeline follows a strict sequence:
 
 ### Proposal Response
 ```
-{ proposal: string, m1nd?: { structuralContextChars: number, grounded: boolean } }
+{
+  proposal: string,
+  m1nd?: { structuralContextChars: number, grounded: boolean },
+  meta?: { provider: string, fallbackUsed: boolean }
+}
 ```
 
-[⟁ tests: kreator-proposal-flow]
-[⟁ tests: m1nd-structural-injection]
+## Risk Surface
+
+[AMBER warning: proposal-loop-not-proof-loop]
+KREATOR proposals are structurally grounded, but the user still decides whether to apply them.
+
+[AMBER warning: visual-specular-gap]
+There is not yet one browser-level proof that the entire user journey from KREATOR/KOMPLETUS into OMX is visually truth-preserving.
+
+[GREEN note: graceful-degradation]
+If m1nd is offline, proposal generation still works; it simply loses structural grounding.
+
+## Binding Truth
+
+Current canonical bindings:
+- `src/components/ChatFooter.tsx`
+- `src/server/routes/ai.ts`
+- `src/server/ai-workflows.ts`
+- `src/server/m1nd-bridge.ts`
+
+Legacy `server.ts:*` references are no longer the best source of truth because the backend is now route-modular.

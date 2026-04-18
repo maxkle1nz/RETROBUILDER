@@ -7,7 +7,7 @@
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[Getting Started](#getting-started) · [Architecture](#architecture) · [Features](#features) · [BU1LDER Mode](#builder-mode) · [OMX Integration](#omx-integration) · [M1ND Mode](#m1nd-mode) · [Documentation](#documentation)
+[Getting Started](#getting-started) · [Architecture](#architecture) · [Current State](#current-state) · [M1ND Mode](#m1nd-mode) · [OMX Runtime](#omx-runtime) · [Documentation](#documentation)
 
 </div>
 
@@ -15,25 +15,65 @@
 
 # M1ND // RETROBUILDER
 
-> AI-powered system architecture engine that transforms natural language into blueprint-grade DAGs — ready for autonomous materialization.
+> A session-first blueprint workbench that turns prompts into grounded system graphs, audits those graphs with m1nd, and hands validated plans into a live OMX build runtime.
 
-RETROBUILDER is a visual blueprint creator that bridges the gap between **ideation** and **execution**. You describe a system in plain language; RETROBUILDER generates a fully connected Directed Acyclic Graph (DAG) with typed modules, data contracts, dependency edges, and acceptance criteria — ready for an autonomous coding agent to build.
+RETROBUILDER sits between idea and implementation:
+
+```text
+Describe -> generate blueprint -> ground -> audit -> validate -> hand off -> watch build truth
+```
+
+It is not just a graph toy and not just a code generator.
+The product today combines:
+- blueprint generation
+- deep research
+- projected m1nd analysis
+- KOMPLETUS full-pipeline reporting
+- real OMX lifecycle handoff into BU1LDER mode
 
 ## Why RETROBUILDER?
 
-Most AI coding tools start from code. **RETROBUILDER starts from architecture.**
+Most AI coding tools start from files.
+RETROBUILDER starts from architecture.
 
-The problem with jumping straight to code is that LLMs produce working files but lose the structural intent — which module depends on which, where data flows, what must be tested first. By the time you realize the architecture is wrong, you've already generated thousands of lines.
+That means you can:
+- design module boundaries before writing code
+- attach contracts, acceptance criteria, and error handling to nodes
+- inspect structural blast radius and readiness before materialization
+- hand a curated blueprint into a real build runtime instead of guessing from prose
 
-RETROBUILDER keeps you at the **blueprint level** until the architecture is right, then exports a machine-consumable execution plan that autonomous agents (like [OMX](https://ohmycodex.com)) can follow phase-by-phase — while you watch the construction happen in real-time.
+## Current State
 
-```
-You describe → RETROBUILDER architects → You validate → BU1LDER visualizes → OMX builds
-```
+Current main-branch baseline:
+- branch: `main`
+- package version: `0.6.1`
+- current verified head during this docs sync: `70eb814`
+- working shape: session-backed blueprints + m1nd cockpit + KOMPLETUS + real OMX runtime
+
+Current structural snapshot from the active m1nd graph on this repo:
+- source files in `src/`: 66
+- source LOC: 16,617
+- functions tracked: 321
+- active graph nodes: 569
+- active graph edges: 766
+- AI providers: 4
+- KOMPLETUS stages: 8
+
+What is already real:
+- session launcher with backend persistence
+- ARCHITECT / M1ND / BU1LDER modes
+- Spotlight node search (`⌘K`)
+- NodeInspector + grounding actions
+- KOMPLETUS report with Specular tab
+- OMX `build/status/stop/stream` lifecycle
+- builder reentry with persisted terminal truth
 
 ## Getting Started
 
-**Prerequisites:** Node.js 18+
+Prerequisites:
+- Node.js 22+ recommended
+- `m1nd-mcp` available in PATH if you want live m1nd features
+- one configured AI provider (`xAI`, `Gemini`, `OpenAI`, or `THE BRIDGE`)
 
 ```bash
 # Clone
@@ -43,244 +83,249 @@ cd RETROBUILDER
 # Install
 npm install
 
-# Configure AI provider
+# Configure
 cp .env.example .env.local
-# Edit .env.local with your API key (see Provider Setup below)
+# edit .env.local with your provider keys / bridge settings
 
 # Run
 npm run dev
 ```
 
-The app launches at `http://localhost:3000`.
+The app launches at:
+- `http://localhost:3000`
 
 ### Provider Setup
 
-RETROBUILDER supports multiple AI providers through a SSOT (Single Source of Truth) abstraction layer. All providers implement the same `chatCompletion(messages, config)` contract.
+RETROBUILDER uses a SSOT provider layer.
+All providers share the same frontend contract and are switched at runtime via the UI.
 
 | Provider | Config | Key Required |
 |---|---|---|
-| **xAI Grok** | `AI_PROVIDER="xai"` | `XAI_API_KEY` |
-| **Google Gemini** | `AI_PROVIDER="gemini"` | `GEMINI_API_KEY` or `GEMINI_API_KEYS` |
-| **OpenAI** | `AI_PROVIDER="openai"` | `OPENAI_API_KEY` |
-| **THE BRIDGE** | `AI_PROVIDER="bridge"` | None (local proxy) |
+| xAI Grok | `AI_PROVIDER="xai"` | `XAI_API_KEY` |
+| Google Gemini | `AI_PROVIDER="gemini"` | `GEMINI_API_KEY` or `GEMINI_API_KEYS` |
+| OpenAI | `AI_PROVIDER="openai"` | `OPENAI_API_KEY` |
+| THE BRIDGE | `AI_PROVIDER="bridge"` | none, if local bridge is already running |
+
+Example:
 
 ```bash
-# .env.local — xAI example
+# .env.local — xAI
 AI_PROVIDER="xai"
 XAI_API_KEY="xai-..."
 
-# .env.local — Bridge example (zero-config local)
+# .env.local — Gemini
+AI_PROVIDER="gemini"
+GEMINI_API_KEYS="key1,key2,key3"
+
+# .env.local — Bridge
 AI_PROVIDER="bridge"
 THEBRIDGE_URL="http://127.0.0.1:7788/v1"
 ```
 
-You can switch providers at runtime via the Model Selector panel in the UI — no restart needed.
-
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Frontend                            │
-│  React 19 · React Flow · Zustand · Framer Motion           │
-│                                                             │
-│  ┌───────────┐  ┌──────────┐  ┌─────────┐  ┌────────────┐ │
-│  │ GraphView │  │ChatFooter│  │RightPanel│  │  Sidebar   │ │
-│  │ (DAG)     │  │(Kreator) │  │(Analysis)│  │(Inspector) │ │
-│  └─────┬─────┘  └────┬─────┘  └────┬─────┘  └─────┬──────┘ │
-│        └──────────────┴─────────────┴──────────────┘        │
-│                         │  HTTP                             │
-├─────────────────────────┼───────────────────────────────────┤
-│                    API Gateway                              │
-│  Express.js · route modules for sessions · config · m1nd · omx · ai    │
-│                                                             │
-│  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐     │
-│  │SSOT Provider │  │ M1ND Bridge│  │ Web Research +   │     │
-│  │Layer         │  │ (MCP stdio)│  │ KOMPLETUS        │     │
-│  └──────────────┘  └────────────┘  └──────────────────┘     │
-│                                                             │
-│  Session domain: payload · topology · semantic · projection │
-│  · advanced · insights · readiness                          │
-└─────────────────────────────────────────────────────────────┘
-```
+```text
+Frontend
+  React 19 · Zustand · @xyflow/react · motion
+  App · GraphView · NodeInspector · RightPanel · ChatFooter · KompletusReport · BuildView
 
-### Structural Profile (via [m1nd](https://github.com/maxkle1nz/m1nd))
+        |
+        | HTTP / SSE
+        v
 
-| Metric | Value |
-|---|---|
-| Total files | 50+ |
-| Total LOC | 7,200+ |
-| Functions | 80+ |
-| Classes | 2 |
-| Graph nodes | 791 |
-| Graph edges | 1,136 |
-| AI Providers | 4 (xAI, Gemini, OpenAI, Bridge) |
-| Pipeline Stages | 8 (KOMPLETUS) |
+Express API Gateway
+  routes/ai.ts
+  routes/config.ts
+  routes/m1nd.ts
+  routes/omx.ts
+  routes/sessions.ts
 
-## Features
-
-### 🏗️ Blueprint Generation
-Describe your system in natural language. The Kreator generates a typed DAG with:
-- **Typed modules** — `frontend`, `backend`, `database`, `security`, `external`
-- **Data contracts** — what each module receives and returns
-- **Decision rationale** — why each architectural choice was made
-- **Dependency edges** — explicit data flow between modules
-
-### 🔬 M1ND Structural Analysis
-Switch to M1ND mode for deep graph analysis powered by the [m1nd](https://github.com/maxkle1nz/m1nd) neuro-symbolic engine:
-- **Blast Radius** — which modules break if this one fails
-- **Co-change Prediction** — which modules likely need updating together
-- **Risk Scoring** — validate modification plans before executing
-- **Architectural Layers** — auto-detect layer violations
-- **Structural Metrics** — LOC, complexity, PageRank per module
-- **Graph Diagrams** — Mermaid/DOT visualization
-
-### 📡 Deep Research Engine
-Before generating blueprints, RETROBUILDER can ground its architectural decisions in real-world data:
-- **Perplexity** — web search for best practices
-- **Semantic Scholar** — academic paper search for algorithms
-- **GitHub** — donor repository discovery for reference implementations
-- **CrossRef** — technical standard discovery
-- **Jina Reader** — deep page content extraction
-
-### 📦 OMX Export (Blueprint → Autonomous Build)
-Export your curated blueprint for autonomous materialization by [OMX](https://ohmycodex.com):
-- **Topological sort** — Kahn's algorithm computes build order from dependencies
-- **Acceptance criteria** — 2-5 testable conditions per module for `$ralph` verification
-- **Phased execution** — Foundation → Core → Integration → Interface
-- **Error handling** — failure modes and circuit-breaker strategies per module
-
-### 🎨 Cyberpunk Design System
-- Dark void aesthetic with glassmorphism panels
-- Animated 2D DAG with React Flow
-- Priority badges (P1, P2...) and acceptance criteria indicators on nodes
-- Blast radius highlighting (red origin, orange impact zone)
-- Mode-specific UI (Architect cyan → M1ND purple → BU1LDER green)
-
-### 🔨 BU1LDER — Live Construction Visualization
-Watch your blueprint come to life in real-time:
-- **Dark-to-light nodes** — start completely dark, illuminate as OMX builds each module
-- **Shimmer animation** — active build nodes pulse with a scanning light effect
-- **Propagation rings** — completion sends a ring burst along edges to dependent nodes
-- **Build Console** — structured log feed with phase tracking and file-level progress
-- **MiniMap illumination** — the minimap lights up as the build wave propagates
-- **Mission Complete** — final summary with files written, lines generated, and elapsed time
-- **SSE streaming** — real-time Server-Sent Events with exponential backoff reconnect
-
-### ⚡ KOMPLETUS — Full Pipeline Engine
-End-to-end blueprint generation with 8 autonomous stages:
-- **KONSTRUKTOR** — skeleton generation from natural language prompt
-- **HARDENER** — critic + dreamer pass (wiring, hardening, missing modules)
-- **SMART TRIAGE** — classifies modules by research depth needed
-- **DEEP RESEARCH** — parallel grounded research (Perplexity, Scholar, GitHub, CrossRef)
-- **SPECULAR AUDIT** — UIX parity mapping (user moments + coverage matrix)
-- **L1GHT PRE-FLIGHT** — contract expansion + cross-node validation
-- **QUALITY GATE** — final structural validation with 60 acceptance criteria
-- **KOMPLETUS** — delivery with full report modal
-
-### 🪞 SPECULAR — Full-Stack SSOT Protocol
-The SPECULAR protocol guarantees that every backend node has a validated UIX representation:
-- **Parsimônia** — max 4-5 user moments per pipeline, domain language only
-- **SSOT Architecture** — backend = truth, UIX + mirror test = pure consumers
-- **Mirror Test** — `tests/kompletus-e2e.ts` validates UIX parity end-to-end
-- **Autonomous Evolution (SPECULAR MODE)** — agent self-evolves per node during OMX build, testing via LLM-validated acceptance criteria and data contracts until it passes or hits max iterations.
-
-### 🔑 Key Rotation
-Gemini provider supports comma-separated API keys for round-robin rotation:
-- Auto-rotate on 429/quota errors
-- `GEMINI_API_KEYS="key1,key2,key3"` in `.env.local`
-- Fully transparent to the rest of the system
-
-## OMX Integration
-
-RETROBUILDER is the **architect**. [OMX](https://ohmycodex.com) is the **builder**. The handoff is intentional — the user decides when the blueprint is ready.
-
-```
-RETROBUILDER (design + validate)
-    │
-    ▼  User clicks "Export to OMX"
-    │
-    ▼  Downloads omx-plan.md + enters BU1LDER Mode
-    │
-    ▼  BU1LDER shows real-time construction
-    │  ● Nodes illuminate dark → light
-    │  ● Build Console streams logs
-    │  ● MiniMap shows propagation wave
-    │
-OMX (autonomous materialization)
-    │  $ralph "execute the plan"
-    │  → Phase 1: Foundation (databases, config)
-    │  → Phase 2: Core Services (auth, APIs)
-    │  → Phase 3: Integration (event buses, queues)
-    │  → Phase 4: Interface (UI, CLI)
-    │  → SPECULAR MODE: Each module is tested against AC. If fail → diagnose → fix.
-    │
-    ▼  Working system
+        |
+        +--> SSOT provider runtime
+        +--> m1nd MCP bridge
+        +--> session projection / readiness / impact / gaps
+        +--> KOMPLETUS pipeline
+        +--> OMX runtime lifecycle
 ```
 
-Every node in the blueprint includes:
-- `acceptance_criteria` — testable conditions Ralph can verify
-- `priority` — build order from topological sort
-- `error_handling` — failure modes for resilient code generation
+Important current backend truths:
+- `server.ts` is now a thin composition root.
+- raw m1nd access lives in `src/server/routes/m1nd.ts`.
+- projected session analysis lives through `src/server/session-analysis.ts` + `src/server/routes/sessions.ts`.
+- active OMX runtime is `src/server/omx-runtime.ts`.
+
+## Product Flow
+
+### 1. Session-first entry
+Users begin in the session launcher:
+- new blueprint
+- reopen saved session
+- import codebase into a blueprint session
+
+Session content is persisted on the backend.
+Some UI preferences are still persisted locally for convenience.
+
+### 2. ARCHITECT mode
+The graph canvas is the primary blueprint surface.
+
+Users can:
+- generate a fresh m1ndmap skeleton
+- edit nodes directly through NodeInspector
+- add grounding to nodes
+- run proposal-based graph mutations
+- search nodes with Spotlight
+
+### 3. M1ND mode
+M1ND mode is now a cockpit over the active session, not just a bag of raw actions.
+
+Current tabs:
+- Ready
+- Impact
+- Gaps
+- Grounding
+- Advanced
+
+Those tabs let the user inspect:
+- export readiness / blockers
+- upstream/downstream impact
+- missing AC / contracts / EH
+- grounded research
+- raw/near-raw advanced m1nd output
+
+### 4. KOMPLETUS
+KOMPLETUS is the full-pipeline path.
+
+Current stages:
+1. konstruktor
+2. hardener
+3. triage
+4. research
+5. specular
+6. l1ght
+7. quality
+8. complete
+
+The result opens `KompletusReport` with four views:
+- Modules
+- Artifacts
+- Specular
+- Summary
+
+### 5. BU1LDER / OMX handoff
+From `KompletusReport`, `Accept & Continue to OMX`:
+- persists/hydrates the active session
+- starts a real OMX build
+- hydrates `useBuildStore`
+- enters `BU1LDER` mode only after build start truth is returned
 
 ## M1ND Mode
 
-RETROBUILDER integrates with the [m1nd](https://github.com/maxkle1nz/m1nd) neuro-symbolic code graph engine via a server-side MCP (Model Context Protocol) bridge.
+RETROBUILDER integrates with m1nd in two layers:
 
-### Setup
+1. Raw HTTP bridge
+- `/api/m1nd/*`
+- `src/server/m1nd-bridge.ts`
+- `src/lib/m1nd.ts`
 
-The m1nd bridge connects automatically when the MCP server is available:
+2. Session-projected analysis layer
+- `src/server/session-projection.ts`
+- `src/server/session-analysis.ts`
+- `src/server/routes/sessions.ts`
+
+That gives the product two kinds of structural truth:
+- direct graph operations
+- active-blueprint-aware cockpit analysis
+
+m1nd setup note:
+- the backend auto-spawns `m1nd-mcp` when it is available in PATH
+- there is no separate WebSocket bridge to launch manually
+
+## KOMPLETUS & Specular
+
+What Specular means today:
+- KOMPLETUS produces a `specular` payload
+- the report renders:
+  - user moments
+  - coverage matrix
+  - node-screen map
+  - parity score
+- `tests/kompletus-e2e.ts` uses the same SSE parser as the browser transport
+
+That means the blueprint/report-level specular audit is real and test-backed.
+
+## OMX Runtime
+
+The active OMX runtime is lifecycle-first and route-backed.
+
+Current routes:
+- `POST /api/omx/build`
+- `GET /api/omx/status/:sessionId`
+- `POST /api/omx/stop/:sessionId`
+- `GET /api/omx/stream/:sessionId`
+
+Current runtime guarantees already validated by tests:
+- explicit start before entering builder mode
+- persisted `queued/running/stopping/stopped/succeeded/failed` truth
+- terminal summary/message persistence
+- builder reentry hydration from remote status
+- fallback when terminal SSE is missed
+- rejection when Codex transport is unavailable instead of fake success
+- stopped-build reuse guard
+
+## Testing & Verification
+
+Verified commands on the current baseline:
 
 ```bash
-# In a separate terminal
-npx @anthropic-ai/mcp-server m1nd
+npm run lint
+npx tsx tests/kompletus-e2e.ts
+npx tsx tests/omx-client-contract.test.ts
+npx tsx tests/omx-real-contract.test.ts
+npx tsx tests/session-route-wiring.test.ts
+npm run build
 ```
-
-The connection indicator in the top-right of the analysis panel shows green when connected.
-
-### Available Actions
-
-| Action | What it does | Use case |
-|---|---|---|
-| **Blast Radius** | Forward/reverse impact propagation | "If auth breaks, what else fails?" |
-| **Co-change** | Temporal co-mutation prediction | "If I change the DB schema, what else needs updating?" |
-| **Risk Score** | Validates a modification plan | "Is this change safe?" |
-| **Diagram** | Mermaid graph centered on a node | Visual dependency exploration |
-| **Layers** | Auto-detected architectural layers | Identify layer violations |
-| **Metrics** | LOC, complexity, PageRank | Find the riskiest modules |
 
 ## Documentation
 
 | Document | Description |
 |---|---|
-| [Overview](doc/01-overview.md) | Project vision and objectives |
-| [Current State](doc/02-current-state.md) | Implementation status |
-| [M1ND Integration](doc/03-m1nd-integration.md) | Graph engine architecture |
-| [Roadmap](doc/04-roadmap.md) | Pending features and ideas |
-| [L1GHT: Kreator](doc/l1ght/kreator.md) | Kreator agent protocol |
-| [L1GHT: Research](doc/l1ght/research-engine.md) | Research engine protocol |
+| [Overview](doc/01-overview.md) | product vision and architecture summary |
+| [Current State](doc/02-current-state.md) | honest implementation snapshot |
+| [M1ND Integration](doc/03-m1nd-integration.md) | raw bridge + session-projected analysis flow |
+| [Roadmap](doc/04-roadmap.md) | only the work that is truly still open |
+| [Demystifier Card Spec](doc/05-demystifier-card-spec.md) | current card/UIX design law |
+| [L1GHT: Kreator](doc/l1ght/kreator.md) | authoring subsystem protocol |
+| [L1GHT: Research](doc/l1ght/research-engine.md) | grounding subsystem protocol |
+| [Changelog](CHANGELOG.md) | release history + current docs-alignment note |
+
+## Known Current Gaps
+
+These gaps are important and intentional to state explicitly:
+
+1. No full browser-level end-to-end proof yet for:
+   session -> m1ndmap -> grounding -> KOMPLETUS -> OMX -> terminal/reentry.
+2. The active OMX runtime is `omx-runtime.ts`, while some legacy SPECULAR loop expectations still live in docs/test/store surfaces around `omx-runner.ts`.
+3. The header version badge in `src/App.tsx` is still hardcoded to `v2.5.0`, which does not match `package.json`.
+4. Frontend chunking still needs a performance pass.
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 19, React Flow, Zustand, Framer Motion |
-| Backend | Express.js, TypeScript, route-modular API, Zod validation |
-| AI Providers | xAI Grok, Google Gemini (key rotation), OpenAI, THE BRIDGE |
-| Graph Engine | m1nd (MCP stdio) |
-| Pipeline | KOMPLETUS (8-stage autonomous) |
-| Research | Perplexity, Semantic Scholar, GitHub, CrossRef |
-| Build | Vite 6 |
-| Styling | Tailwind CSS 4 |
+| Frontend | React 19, Vite 6, Tailwind 4, Zustand 5, `@xyflow/react`, motion |
+| Backend | Express 4, TypeScript, route-modular API |
+| AI Providers | xAI, Gemini, OpenAI, THE BRIDGE |
+| Graph Engine | m1nd MCP bridge (stdio child process) |
+| Pipeline | KOMPLETUS + L1GHT pre-flight + Specular audit |
+| Build Runtime | real OMX lifecycle runtime with Codex transport checks |
+| Research | Perplexity, Serper, Semantic Scholar, CrossRef, GitHub, Jina |
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).
 
 ---
 
 <div align="center">
-
 Built by [maxkle1nz](https://github.com/maxkle1nz)
-
-
 </div>

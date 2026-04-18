@@ -1,21 +1,36 @@
 # System Overview
 
 ## Project Vision
-RETROBUILDER is an advanced, cyberpunk-themed visual blueprint creator and system architecture analysis tool. It allows users to design, visualize, and analyze complex system architectures using an interactive node-based graph interface, assisted by AI and grounded by the m1nd neuro-symbolic code graph engine.
+RETROBUILDER is a session-first visual architecture workbench for designing systems before coding them. It turns natural-language prompts into blueprint-grade module graphs, grounds those blueprints with deep research and m1nd structural analysis, and hands validated plans into a live OMX builder runtime.
 
 ## Core Objectives
-1. **Visual Architecture Design:** Provide an interactive 2D/3D graph interface to map out system components (nodes) and their relationships (links) with a premium cyberpunk aesthetic.
-2. **AI-Assisted Generation:** Utilize advanced LLMs via a SSOT provider architecture (xAI Grok, OpenAI, THE BRIDGE) to automatically generate system architectures, technical proposals, and acceptance criteria from natural language prompts.
-3. **Deep Graph Analysis (m1nd Integration):** Integrate with the m1nd neuro-symbolic graph engine to perform structural analysis — blast radius computation, co-change prediction, architectural layer detection, and structural hypothesis testing.
-4. **Deep Research Engine:** Multi-source technical research (Perplexity, Semantic Scholar, GitHub, CrossRef, Jina) cross-referenced with graph nodes for structurally-grounded knowledge.
-5. **OMX Materialization Bridge:** Export blueprints as structured plans with topological ordering, acceptance criteria, and error handling for autonomous materialization.
-6. **Dual Operational Modes:**
-   - **ARCHITECT Mode:** Build, edit, and define data contracts of the system blueprint.
-   - **M1ND Mode:** Deep analysis, impact prediction, and structural querying via the m1nd engine.
+1. Visual architecture design: build and edit typed system graphs in a compact m1ndmap canvas.
+2. AI-assisted generation: use the SSOT provider layer to generate skeletons, proposals, contracts, and rationale from prompts.
+3. Structural analysis: project the active blueprint into m1nd so users can inspect readiness, impact, gaps, diagrams, layers, metrics, and activation results.
+4. Grounded research: attach real-world research and document/code bindings to nodes before committing to implementation.
+5. Autonomous handoff: move a validated blueprint into the real OMX build lifecycle and watch progress in BU1LDER mode.
+6. Specular truth: keep user-facing surfaces aligned with backend pipeline/runtime truth instead of decorative status theater.
+
+## Current Product Shape
+- Session-first workflow: new blueprint, reopen session, or import codebase into a backend-backed session.
+- Three main modes:
+  - ARCHITECT — create and refine the m1ndmap.
+  - M1ND — inspect readiness, impact, gaps, grounding, and advanced graph actions.
+  - BU1LDER — follow the live OMX build lifecycle and terminal recovery state.
+- KOMPLETUS pipeline: 8 stages from skeleton generation to quality-gated report delivery.
+- OMX runtime: explicit `build`, `status`, `stop`, and `stream` routes backed by `src/server/omx-runtime.ts`.
 
 ## High-Level Architecture
-- **Frontend:** React 19, Vite 6, Tailwind CSS 4, Zustand 5 (state management), `@xyflow/react` 12 (2D graph + dagre layout), `react-force-graph-3d` (3D visualization), Framer Motion (animations).
-- **Backend:** Express.js server acting as an API gateway for AI requests, m1nd bridge, and static frontend serving in production.
-- **AI Integration:** SSOT Provider Layer — supports xAI Grok (`api.x.ai/v1`), OpenAI, and THE BRIDGE (local proxy at `127.0.0.1:7788/v1`), all using the OpenAI SDK.
-- **m1nd Engine:** Server-side MCP bridge — spawns `m1nd-mcp` as a child process, communicates via JSON-RPC 2.0 over stdin/stdout. Frontend accesses via HTTP at `/api/m1nd/*`.
-- **Research Engine:** Multi-source web research with Perplexity, Serper, Semantic Scholar, CrossRef, GitHub, and Jina Reader.
+- Frontend: React 19, Vite 6, Tailwind 4, Zustand 5, `@xyflow/react`, motion, lucide-react.
+- Backend: Express route modules for `sessions`, `config`, `m1nd`, `omx`, and `ai`.
+- AI integration: SSOT provider layer for xAI, Gemini, OpenAI, and THE BRIDGE.
+- m1nd integration: server-side MCP stdio bridge plus session projection/readiness/impact/gap analysis.
+- Research: multi-source web research plus m1nd document binding/drift enrichment.
+- Build runtime: real Codex-backed OMX lifecycle with persisted terminal truth and builder reentry hydration.
+
+## Documentation Map
+- `README.md` — operator-facing product and setup guide.
+- `doc/02-current-state.md` — source-of-truth implementation snapshot.
+- `doc/03-m1nd-integration.md` — raw m1nd endpoints and session-projected analysis flow.
+- `doc/04-roadmap.md` — what is actually next from the current baseline.
+- `doc/05-demystifier-card-spec.md` — current card/UIX design law and remaining card polish.

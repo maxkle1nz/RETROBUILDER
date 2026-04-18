@@ -1,10 +1,10 @@
 # Demystifier Card UIX Spec
 
-> For Hermes: use this as the canonical design + implementation spec for the m1ndmap card redesign on branch `design`.
+> For Hermes: use this as the canonical card/UIX spec for the Demystifier node system now living on `main`.
 
-Goal: transform the current m1ndmap module node from a wide graph panel into a compact, highly legible `Demystifier` card that explains a module at a glance and makes side-by-side comparison fast.
+Goal: keep the m1ndmap node compact, highly legible, and side-by-side comparable while preserving the structural graph feel.
 
-Architecture: keep the existing React Flow / dagre graph substrate, but replace the current `CyberNode` presentation grammar with a disciplined card face. The graph remains a graph; the node primitive changes from “cyber panel” to “Demystifier card”. Layout constants, card anatomy, typography, and metadata summarization must all align to the new primitive.
+Architecture: the major Demystifier shift is already implemented on `main`, but this document remains the design law for future polish. The graph remains a graph; the node primitive is a disciplined Demystifier card rather than a wide cyber panel. Layout constants, card anatomy, typography, and metadata summarization should continue to obey this spec.
 
 Tech Stack: React 19, `@xyflow/react`, dagre layout, Tailwind CSS 4, Zustand state, lucide-react icons.
 
@@ -50,14 +50,18 @@ Current files involved:
 - `src/components/KompletusReport.tsx`
 - `src/lib/api.ts`
 
-Current problems at code level:
-- `layout.ts` reserves `340x180` per node
-- dagre spacing is very large: `nodesep: 120`, `ranksep: 160`
-- `CyberNode` uses `min-w-[200px]` with no disciplined fixed card footprint
-- card content is split into horizontal bands instead of one compact face
-- label is truncated early while metadata consumes multiple extra strips
-- rich fields exist in `NodeData` but most are not summarized on-card
-- `fitView()` amplifies the sparsity caused by oversized layout reservation
+Current state at code level:
+- `layout.ts` now uses a compact truthful footprint: `220x180`
+- dagre spacing is already tightened to `nodesep: 64`, `ranksep: 104`
+- `CyberNode` already renders the compact Demystifier-style face on `main`
+- data-flow arrows are now visible in the graph
+- node comparison is materially better than the earlier wide-panel state
+- rich fields in `NodeData` are summarized more coherently on-card and through the inspector/report surfaces
+
+Remaining visual gaps:
+- continue tightening large-graph density under real dogfood sessions
+- keep the card/report/inspector language aligned so the module reads consistently across surfaces
+- add explicit browser-level proof that the visual card/report surfaces reflect backend truth end-to-end
 
 Current node data available:
 - `label`
@@ -74,7 +78,7 @@ Current node data available:
 - `constructionNotes`
 
 Conclusion:
-The data model is already rich enough. The problem is the card language and graph spacing, not lack of information.
+The data model is rich enough and the main card compaction has landed. The remaining work is visual-truth hardening, not a fresh redesign from scratch.
 
 ---
 
@@ -182,11 +186,11 @@ Target footprint:
 Important:
 The graph layout box must match the real card footprint closely.
 
-This means `layout.ts` should be recalibrated to something near:
-- nodeWidth: `210–230`
-- nodeHeight: `170–190`
+This means `layout.ts` should stay near the current compact implementation:
+- nodeWidth: `220`
+- nodeHeight: `180`
 
-Exact values can be tuned after visual verification, but the current `340x180` is too wide for the intended card language.
+Current `main` implementation already matches this direction. Further tuning should happen only after real visual dogfood, not by drifting back toward oversized placeholders.
 
 ---
 
@@ -200,9 +204,11 @@ Required changes:
 - keep `TB` initially unless testing proves `LR` is better for module reading
 - preserve fitView, but only after node footprint is truthful
 
-Initial target tuning:
-- `nodesep`: from `120` down toward `56–80`
-- `ranksep`: from `160` down toward `90–120`
+Current main tuning:
+- `nodesep`: `64`
+- `ranksep`: `104`
+
+Future tuning should stay in this compact band unless larger real-world blueprints prove a better density tradeoff.
 
 Expected effect:
 - less dead air

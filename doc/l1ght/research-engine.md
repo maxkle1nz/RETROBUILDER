@@ -4,52 +4,55 @@ Node: research-engine
 State: ◉ operational
 Color: #b026ff
 Glyph: 🔬
-Completeness: 90%
+Completeness: 92%
 Proof: empirical
 Depends on:
-  - perplexity-api
-  - serper-api
-  - jina-reader
-  - semantic-scholar
-  - crossref
-  - github-search
-  - m1nd-bridge
+  - src/server/web-research.ts
+  - src/server/ai-workflows.ts
+  - src/server/m1nd-bridge.ts
 Next:
-  - citation-graph
-  - research-cache
+  - browser-level proof of grounding visibility
+  - research caching / replay
 ---
 
 ## Overview
 
-[⍂ entity: WebResearchService] orchestrates parallel queries across 7 research sources to provide the Kreator and Deep Research endpoint with grounded, citation-backed context.
+[⌂ entity: WebResearchService] orchestrates parallel multi-source research used by node grounding and the broader KOMPLETUS pipeline.
+
+The current user-facing entry points are:
+- `NodeContextMenu` deep research
+- `NodeInspector` Grounding tab
+- `RightPanel` Grounding tab
+- `performDeepResearchWorkflow(...)` inside backend AI workflows
 
 [⟁ binds_to: src/server/web-research.ts]
-[⟁ binds_to: server.ts:performDeepResearch]
+[⟁ binds_to: src/server/ai-workflows.ts::performDeepResearchWorkflow]
+[⟁ binds_to: src/components/NodeInspector.tsx]
+[⟁ binds_to: src/components/NodeContextMenu.tsx]
+[⟁ binds_to: src/components/RightPanel.tsx]
 
 ## Source Architecture
 
-The engine fires all sources in parallel via `Promise.allSettled`:
+The engine currently pulls from these source channels:
+- Perplexity
+- Serper Web
+- Serper Scholar
+- Jina Reader
+- Semantic Scholar
+- CrossRef
+- GitHub Search
 
-| Source | API | Purpose |
-|---|---|---|
-| [⍂ entity: Perplexity] | `sonar-pro` | Synthesized web answers with citations |
-| [⍂ entity: Serper-Web] | Google Search API | Top web results for queries |
-| [⍂ entity: Serper-Scholar] | Google Scholar API | Academic paper discovery |
-| [⍂ entity: Jina-Reader] | `r.jina.ai` | Full-text markdown extraction |
-| [⍂ entity: Semantic-Scholar] | S2 API | Paper metadata and citation graphs |
-| [⍂ entity: CrossRef] | CrossRef API | DOI resolution and metadata |
-| [⍂ entity: GitHub-Search] | GitHub API | Donor repository discovery |
+The fetch strategy is parallel and best-effort; partial results are accepted.
 
-[𝔻 confidence: 0.95] — All sources have fallback handling; partial results are accepted.
+## m1nd Document Enrichment
 
-## M1ND Document Integration
+[⟐ state: m1nd-enriched]
 
-[⍐ state: m1nd-enriched] — When m1nd is online, the Deep Research pipeline enriches results with:
+When m1nd is online, `performDeepResearchWorkflow(...)` enriches research output with document/code linkage signals:
+- `documentBindings(...)`
+- `documentDrift(...)`
 
-1. `document_bindings(node.label)` → finds code locations implementing the researched concept
-2. `document_drift(node.label)` → detects stale bindings between docs and code
-
-This creates a closed-loop: **Research → Structure → Code → Verification**.
+That lets the research report talk not only about external knowledge, but also about where the concept is likely bound into the code/document graph.
 
 [⟁ depends_on: src/server/m1nd-bridge.ts]
 
@@ -58,21 +61,42 @@ This creates a closed-loop: **Research → Structure → Code → Verification**
 ### Research Response
 ```
 {
-  research: string (markdown),
+  research: string,
   meta: {
     sourcesFound: number,
     searchTimeMs: number,
-    sourcesBreakdown: { perplexity, webArticles, scholarPapers, semanticScholar, crossref, githubDonors },
+    sourcesBreakdown: {
+      perplexity,
+      webArticles,
+      scholarPapers,
+      semanticScholar,
+      crossref,
+      githubDonors
+    },
     enrichedPages: number,
-    m1nd?: { structuralBindingsChars: number, grounded: boolean }
+    m1nd?: {
+      structuralBindingsChars: number,
+      grounded: boolean
+    }
   }
 }
 ```
 
+## Operational Truth
+
+What is true today:
+- grounding is available as a first-class UX action in multiple surfaces
+- research is not just a detached note; it is written back into `researchContext`
+- the research pipeline is structurally enriched when m1nd is available
+- KOMPLETUS reuses the same general research substrate at larger pipeline scale
+
 ## Risk Surface
 
-[AMBER warning: rate-limits] — GitHub (60 req/hr unauthenticated), Semantic Scholar (429 under load).
-[AMBER warning: api-cost] — Perplexity Sonar Pro has per-query costs; other sources are free.
+[AMBER warning: visual-grounding-proof-gap]
+We still need a browser-level proof that grounding results are surfaced coherently across the full m1ndmap -> report -> build journey.
 
-[⟁ tests: deep-research-7-source-pipeline]
-[⟁ tests: m1nd-document-bindings-injection]
+[AMBER warning: external-rate-limits]
+GitHub and scholar-style sources can still rate-limit under load.
+
+[GREEN note: graceful-partial-results]
+The system accepts partial research completion rather than collapsing on one provider failure.

@@ -1,138 +1,131 @@
-# Roadmap & Pending Tasks
+# Roadmap & Pending Work
 
-Progress at v0.6.1: **~95% of original roadmap complete**. Items 3, 4, 6, 8, 9, and 10 are fully closed. Items 1, 2, and 5 have remaining work.
+Current baseline: main @ `70eb814` with clean working tree, passing lint/build/contracts, active OMX runtime in `src/server/omx-runtime.ts`, and full KOMPLETUS report flow already wired into BU1LDER handoff.
 
----
-
-## 1. Global Search & Deep Querying (m1nd.activate)
-**Objective:** Allow users to ask complex questions about the graph structure using the m1nd engine.
-
-| Sub-item | Status | Notes |
-|---|---|---|
-| Chat integration in M1ND mode | ✅ Done | ChatFooter routes to m1nd.activate in M1ND mode (v0.3.0) |
-| Dedicated Spotlight search bar | ❌ Pending | Global search bar for m1nd queries without entering chat |
-| Visual feedback for generic results | 🟡 Partial | Blast radius has highlighting; activate/predict results don't highlight nodes on canvas |
-
-**Remaining work:** Spotlight-style search bar + generic node highlighting for all m1nd results.
+This roadmap only lists the work that is still genuinely open from the current codebase.
 
 ---
 
-## 2. Graph Interaction Refinements
-**Objective:** Improve the usability and readability of the graph canvas.
+## 1. Full Visual Specular Truth Test
+Objective: prove, in a real browser, that backend truth is translated correctly from session creation through KOMPLETUS and OMX completion.
 
-| Sub-item | Status | Notes |
-|---|---|---|
-| Blast radius node highlighting | ✅ Done | Red pulse + orange glow (v0.3.0) |
-| Priority badges on nodes | ✅ Done | P1/P2/P3 build order indicators (v0.4.0) |
-| AC indicators on nodes | ✅ Done | Replaced by Demystifier metrics grid with AC / EH / CTR / RCH slots on CyberNode (design branch) |
-| Demystifier card compaction | ✅ Done | CyberNode redesigned into compact Demystifier card + tighter dagre spacing |
-| Data flow arrows on links | ❌ Pending | Edges lack directional indicators |
-| Node clustering / grouping | ❌ Pending | Large graphs benefit from visual grouping |
-| Physics stabilization | 🟡 Partial | dagre auto-layout works; no interactive physics tuning |
+Status: pending
 
-**Remaining work:** Directional arrows on edges + node clustering for large graphs.
+Needed:
+- browser-level E2E for:
+  - create/load/import session
+  - generate m1ndmap
+  - ground selected modules
+  - run KOMPLETUS
+  - inspect Specular tab
+  - accept handoff into OMX build
+  - observe terminal build state
+  - reload/reenter builder and preserve terminal truth
+- screenshot/evidence checkpoints for each stage
+- backend-vs-UI truth matrix for all critical events
 
----
-
-## 3. AI Action Execution (KREATOR Mode) ✅ CLOSED
-**No remaining work.**
-
----
-
-## 4. Error Handling & Edge Cases ✅ CLOSED
-**No remaining work.**
+Why this matters:
+- current tests validate transport/contracts well
+- but we still lack a visual end-to-end proof that the user sees the same truth the backend emits
 
 ---
 
-## 5. Deployment Preparation
-**Objective:** Prepare the app for production hosting.
+## 2. Active OMX Runtime / SPECULAR Convergence
+Objective: remove ambiguity between the active routed runtime and legacy SPECULAR loop expectations.
 
-| Sub-item | Status | Notes |
-|---|---|---|
-| `.env.example` documented | ✅ Done | Exists in repo root |
-| Vite build + Express static | ✅ Done | `npm run build` + `npm start` works |
-| Dockerfile | ❌ Pending | No container config exists |
-| CI/CD pipeline | ❌ Pending | No GitHub Actions or similar |
-| Automated tests | ✅ Done | `tests/kompletus-e2e.ts` — mirror test with SPECULAR assertions (v0.6.0) |
+Status: pending
 
-**Remaining work:** Dockerfile + CI/CD pipeline.
+Current truth:
+- active routed runtime = `src/server/omx-runtime.ts`
+- active router = `src/server/routes/omx.ts`
+- legacy/alternate reference logic still exists in `src/server/omx-runner.ts`
+- frontend store/tests still know about `specular_iteration` and `build_complete.specular`
 
----
-
-## 6. Critical Backlog & Fixes ✅ CLOSED (v0.6.0)
-**Objective:** Address operational limitations discovered during full-pipeline autonomous tests.
-
-| Sub-item | Severity | Status | Notes |
-|---|---|---|---|
-| Server-Side Cycle Detection | P1 | ✅ Done | `validateGraphIntegrity()` with DAG enforcement (v0.5.0) |
-| OMX Bootstrapping (Phase 0) | P1 | ✅ Done | KompletusReport → OMX auto-trigger wired (v0.6.1) |
-| Batch Research Queue | P2 | ✅ Done | KOMPLETUS `parallelResearch()` runs all nodes in parallel (v0.6.0) |
-| Donor Logic Checking | P2 | ❌ Pending | Validating incompatible cross-stack logic |
-
-**No remaining critical items.**
+Needed:
+- decide whether SPECULAR live iteration belongs in the active runtime
+- either:
+  - implement that stream truth in `omx-runtime.ts`, or
+  - retire/segregate the legacy expectations and document the builder as lifecycle-first, not live-specular-first
+- update docs/tests/store surfaces so one truth exists
 
 ---
 
-## 7. Beyond Original Roadmap (Delivered)
+## 3. Version / Release Truth
+Objective: align visible product versioning and release-facing docs with actual package/runtime truth.
 
-Features shipped that exceeded the original scope:
+Status: pending
 
-| Feature | Version | Impact |
-|---|---|---|
-| Multi-provider AI (xAI + OpenAI + Bridge) | v0.2.0 | 3 providers with runtime switching |
-| Live model discovery API | v0.2.0 | Auto-list models per provider |
-| Deep Research Engine (6 sources) | v0.3.0 | Perplexity, Scholar, GitHub, CrossRef, Jina |
-| OMX Export Bridge | v0.4.0 | Autonomous materialization pipeline |
-| Topological Sort (Kahn's) | v0.4.0 | Build priority from dependency edges |
-| Acceptance Criteria (Zod-enforced) | v0.4.0 | 2–5 testable conditions per module |
-| Design System Unification | v0.4.1 | Semantic color tokens, unified rounding, mode-adaptive glows |
-| **BU1LDER Live Construction** | **v0.5.0** | **Real-time SSE build visualization with dark-to-light node states** |
-| **Build Console** | **v0.5.0** | **Structured log feed + Mission Complete metrics screen** |
-| **3-Mode System** | **v0.5.0** | **ARCHITECT → M1ND → BU1LDER with full UIX color theming** |
-| **KOMPLETUS Pipeline** | **v0.6.0** | **8-stage autonomous blueprint engine with SSE streaming** |
-| **SPECULAR AUDIT** | **v0.6.0** | **UIX parity mapping — user moments + coverage matrix** |
-| **SPECULAR Protocol v7** | **v0.6.0** | **Full-stack SSOT law with autonomous evolution mode** |
-| **Google Gemini Provider** | **v0.6.0** | **4th provider with key rotation (round-robin on 429/quota)** |
-| **Mirror Test** | **v0.6.0** | **E2E test with SPECULAR assertions (same parser as UIX)** |
-| **Architecture Analyzer Fix** | **v0.6.0** | **Strips research metadata — no more code/knowledge confusion** |
+Current drift:
+- `package.json` = `0.6.1`
+- header badge in `src/App.tsx` still renders `v2.5.0`
+
+Needed:
+- unify version source
+- make header badge truthful
+- keep changelog/release notes aligned with active runtime path and shipped behavior
 
 ---
 
-## 8. BU1LDER — Live Construction Environment ✅ CLOSED (v0.5.0)
-**No remaining work — BU1LDER is feature-complete.**
+## 4. Performance & Bundle Shaping
+Objective: reduce frontend chunk size and keep the UI responsive as the system grows.
+
+Status: pending
+
+Current signal:
+- production build warns about large chunks
+
+Needed:
+- code-split heavy surfaces where practical
+- review static + dynamic imports around `src/lib/api.ts` and large modal/runtime surfaces
+- preserve current UX while reducing bundle concentration
 
 ---
 
-## 9. KOMPLETUS — Full Pipeline Engine ✅ CLOSED (v0.6.0)
-**Objective:** End-to-end blueprint generation with research, validation, and UIX parity audit.
+## 5. Delivery Automation / CI
+Objective: make the current contract suite and future visual truth suite run automatically.
 
-| Sub-item | Status | Notes |
-|---|---|---|
-| KONSTRUKTOR (Stage 1) | ✅ Done | Skeleton generation from prompt |
-| HARDENER (Stage 2) | ✅ Done | Critic + dreamer pass |
-| SMART TRIAGE (Stage 3) | ✅ Done | Module classification by research depth |
-| DEEP RESEARCH (Stage 4) | ✅ Done | Parallel grounded research (6 sources) |
-| SPECULAR AUDIT (Stage 5) | ✅ Done | User moments + coverage matrix + parity score |
-| L1GHT PRE-FLIGHT (Stage 6) | ✅ Done | Contract expansion + cross-node validation |
-| QUALITY GATE (Stage 7) | ✅ Done | Final validation with 60 acceptance criteria |
-| KOMPLETUS Report Modal | ✅ Done | 4 tabs: Modules, Artifacts, Specular, Summary |
-| SSE Streaming | ✅ Done | Real-time progress events per stage |
-| Mirror Test | ✅ Done | `tests/kompletus-e2e.ts` with SPECULAR assertions |
+Status: pending
 
-**No remaining work — KOMPLETUS is feature-complete.**
+Needed:
+- CI entrypoint for:
+  - `npm run lint`
+  - `npm run build`
+  - `npx tsx tests/kompletus-e2e.ts`
+  - `npx tsx tests/omx-client-contract.test.ts`
+  - `npx tsx tests/omx-real-contract.test.ts`
+  - `npx tsx tests/session-route-wiring.test.ts`
+- future browser E2E job for visual specular truth
+- optional artifact retention for screenshots/logs when failures occur
 
 ---
 
-## 10. SPECULAR MODE — Autonomous Agent Evolution ✅ CLOSED (v0.6.1)
-**Objective:** Implement the autonomous test→diagnose→fix→retest loop per node during OMX materialization.
+## 6. Graph UX Scale-Up
+Objective: keep the graph readable as blueprints grow.
 
-| Sub-item | Status | Notes |
-|---|---|---|
-| Mirror Test Engine | ✅ Done | LLM-validated AC + data contract check per node |
-| SPECULAR Loop (up to 3 iterations) | ✅ Done | test→fail→diagnose→fix→retest in omx-runner.ts |
-| SSE Events (specular_iteration) | ✅ Done | Real-time UIX feedback during SPECULAR iterations |
-| Build Console Integration | ✅ Done | useBuildStore handles specular_iteration with status icons |
-| KompletusReport → OMX Wiring | ✅ Done | "Accept & Continue" triggers full OMX build pipeline |
-| SPECULAR Certification in build_complete | ✅ Done | certified boolean + fixes count in final SSE event |
+Status: partial
 
-**No remaining work — SPECULAR MODE is fully integrated into the OMX pipeline.**
+Already done:
+- directional arrows
+- Demystifier compaction
+- spotlight search
+- node inspector + connection suggester
+
+Still worth improving:
+- larger-graph grouping/clustering
+- more explicit canvas-level visual summaries for activate/predict results beyond panel output
+- further density tuning once bigger real-world blueprints are exercised under dogfood
+
+---
+
+## Completed Baseline (do not treat as pending)
+
+These are already materially present in the codebase:
+- session-first launcher and backend-backed sessions
+- m1nd cockpit with readiness / impact / gaps / grounding / advanced tabs
+- deep research from multiple sources with m1nd document enrichment
+- KOMPLETUS 8-stage pipeline with SSE and Specular report modal
+- real OMX build lifecycle routes (`build/status/stop/stream`)
+- builder reentry hydration and terminal recovery
+- stopped-build reuse guard
+- spotlight search and NodeInspector workflow
+- compact Demystifier card system on main
