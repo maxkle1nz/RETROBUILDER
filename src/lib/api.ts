@@ -206,6 +206,41 @@ export class ExportBlockedError extends Error {
   }
 }
 
+export interface OmxTransportInfo {
+  kind: 'codex-cli';
+  command: string;
+  available: boolean;
+}
+
+export interface OmxBuildStatus {
+  sessionId: string;
+  buildId?: string;
+  status: 'idle' | 'queued' | 'running' | 'succeeded' | 'failed' | 'stopping' | 'stopped';
+  workspacePath?: string;
+  transport: OmxTransportInfo;
+  source: 'persisted-session' | 'session-draft';
+  totalNodes?: number;
+  completedNodes?: number;
+  buildProgress?: number;
+  activeNodeId?: string | null;
+  nodeStates?: Record<string, 'dormant' | 'queued' | 'building' | 'complete' | 'error'>;
+  result?: {
+    totalFiles: number;
+    totalLines: number;
+    elapsedMs: number;
+  };
+  terminalMessage?: string;
+}
+
+export interface OmxBuildStartResponse extends OmxBuildStatus {
+  buildId: string;
+  status: 'queued' | 'running' | 'stopping' | 'stopped';
+  workspacePath: string;
+  streamUrl: string;
+  statusUrl: string;
+  stopUrl: string;
+}
+
 // ─── Provider & Model Config API ─────────────────────────────────────
 
 export async function fetchProviders(): Promise<{ providers: ProviderInfo[]; active: string }> {
@@ -495,6 +530,36 @@ export async function exportSessionDraftToOmx(
       throw new ExportBlockedError(data.error || "Blueprint is blocked.", data.readiness);
     }
     throw new Error(data.error || 'Failed to export session to OMX');
+  }
+  return res.json();
+}
+
+export async function startOmxBuild(sessionId: string, draft?: SessionDraftPayload): Promise<OmxBuildStartResponse> {
+  const res = await fetch('/api/omx/build', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(draft ? { sessionId, draft } : { sessionId }),
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to start OMX build');
+  }
+  return res.json();
+}
+
+export async function fetchOmxStatus(sessionId: string): Promise<OmxBuildStatus> {
+  const res = await fetch(`/api/omx/status/${sessionId}`);
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to fetch OMX status');
+  }
+  return res.json();
+}
+
+export async function stopOmxBuild(sessionId: string): Promise<{ sessionId: string; buildId?: string; status: 'idle' | 'stopping' | 'stopped' }> {
+  const res = await fetch(`/api/omx/stop/${sessionId}`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to stop OMX build');
   }
   return res.json();
 }

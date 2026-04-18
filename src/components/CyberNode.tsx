@@ -15,9 +15,9 @@ type CyberNodeData = { data: NodeData; selected?: boolean };
 const STATUS_CYCLE: NodeData['status'][] = ['pending', 'in-progress', 'completed'];
 
 const STATUS_META: Record<NodeData['status'], { label: string; tone: string; color: string }> = {
-  pending:       { label: 'Pending',     tone: 'rgba(148,163,184,0.12)', color: '#94a3b8' },
-  'in-progress': { label: 'In Progress', tone: 'rgba(0,242,255,0.12)',   color: '#00f2ff' },
-  completed:     { label: 'Done',        tone: 'rgba(80,250,123,0.14)',   color: '#50fa7b' },
+  pending:       { label: 'PENDING', tone: 'rgba(148,163,184,0.12)', color: '#94a3b8' },
+  'in-progress': { label: 'ACTIVE',  tone: 'rgba(0,242,255,0.12)',   color: '#00f2ff' },
+  completed:     { label: 'DONE',    tone: 'rgba(80,250,123,0.14)',  color: '#50fa7b' },
 };
 
 // ─── Type metadata ─────────────────────────────────────────────────────────────
@@ -54,6 +54,16 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
   const ehCount     = data.error_handling?.length ?? 0;
   const hasContract = Boolean(data.data_contract?.trim());
   const hasResearch = Boolean(data.researchContext?.trim());
+  const semanticFooter = [
+    data.label.toLowerCase(),
+    acCount || ehCount
+      ? `${acCount} AC / ${ehCount} EH`
+      : hasContract
+        ? 'contract defined'
+        : hasResearch
+          ? 'grounding active'
+          : 'grounding missing',
+  ].join(' · ');
 
   // ── Description inline edit ──────────────────────────────────────────────
   const [editingDesc, setEditingDesc] = useState(false);
@@ -139,6 +149,10 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
       />
 
       <div className="p-3 flex flex-col gap-2.5">
+
+        <div className="text-[8px] font-semibold uppercase tracking-[0.24em] text-text-dim/80">
+          Demystifier
+        </div>
 
         {/* ── Row 1: Type chip (clickable) + Priority (clickable) + Status (clickable) ── */}
         <div className="flex items-center justify-between gap-1.5">
@@ -344,6 +358,14 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
           <Indicator testId="demystifier-metric-eh"  icon={<AlertTriangle size={9} />} label={ehCount > 0 ? `${ehCount} Error handlers` : 'No error handling'} tone="#ffcb6b" active={ehCount  > 0} />
           <Indicator testId="demystifier-metric-ctr" icon={<FileText size={9} />}      label={hasContract ? 'Contract set'              : 'No contract'}       tone="#8be9fd" active={hasContract} />
           <Indicator testId="demystifier-metric-rch" icon={<FlaskConical size={9} />}  label={hasResearch  ? 'Grounded'                 : 'Not grounded'}      tone="#b026ff" active={hasResearch} />
+        </div>
+
+        <div
+          data-testid="demystifier-footer"
+          className="truncate text-[9px] text-text-dim uppercase tracking-[0.08em]"
+          title={semanticFooter}
+        >
+          {semanticFooter}
         </div>
 
       </div>

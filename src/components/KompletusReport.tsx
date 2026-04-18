@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
 import { useBuildStore } from '../store/useBuildStore';
-import type { NodeData, KompletusResult, SpecularAuditResult, UserMoment, NodeScreenEntry } from '../lib/api';
+import { createSession, saveSession, startOmxBuild, type NodeData, type KompletusResult, type SpecularAuditResult, type UserMoment, type NodeScreenEntry } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X, Check, AlertTriangle, ChevronDown, ChevronRight,
@@ -477,6 +477,12 @@ export default function KompletusReport() {
     setGraphData,
     setManifesto,
     setArchitecture,
+    activeSessionId,
+    activeSessionName,
+    activeSessionSource,
+    projectContext,
+    importMeta,
+    hydrateSession,
   } = useGraphStore();
 
   const [activeView, setActiveView] = useState<'modules' | 'artifacts' | 'specular' | 'summary'>('modules');
@@ -501,25 +507,60 @@ export default function KompletusReport() {
 
   if (!showKompletusReport || !result) return null;
 
-  const handleAcceptAndContinue = () => {
-    // Apply KOMPLETUS blueprint to the main graph store
-    setGraphData(result.graph);
-    setManifesto(result.manifesto);
-    setArchitecture(result.architecture);
-    closeKompletusReport();
+  const handleAcceptAndContinue = async () => {
+    try {
+      let sessionId = activeSessionId;
 
-    // ─── Activate OMX Build Mode ───
-    // Init build node states from the blueprint, then trigger BU1LDER mode.
-    // The useOMXStream hook in BuildView will auto-open the SSE connection
-    // once isBuilding=true + sessionId is available.
-    const { resetBuild, initNodeStates, startBuild } = useBuildStore.getState();
-    const nodeIds = result.graph.nodes.map((n: { id: string }) => n.id);
-    resetBuild();
-    initNodeStates(nodeIds);
-    startBuild();
-    useGraphStore.getState().setAppMode('builder');
+      if (sessionId) {
+        const updatedSession = await saveSession(sessionId, {
+          name: activeSessionName || 'Kompletus Blueprint',
+          manifesto: result.manifesto,
+          architecture: result.architecture,
+          graph: result.graph,
+          projectContext,
+          importMeta: importMeta || undefined,
+        });
+        hydrateSession(updatedSession);
+        sessionId = updatedSession.id;
+      } else {
+        const createdSession = await createSession({
+          name: activeSessionName || result.manifesto.slice(0, 48) || 'Kompletus Blueprint',
+          source: activeSessionSource || 'manual',
+          manifesto: result.manifesto,
+          architecture: result.architecture,
+          graph: result.graph,
+          projectContext,
+          importMeta: importMeta || undefined,
+        });
+        hydrateSession(createdSession);
+        sessionId = createdSession.id;
+      }
 
-    toast.success(`KOMPLETUS → OMX: ${result.graph.nodes.length} modules — Build Mode activated`);
+      // Apply KOMPLETUS blueprint to the main graph store
+      setGraphData(result.graph);
+      setManifesto(result.manifesto);
+      setArchitecture(result.architecture);
+
+      const build = await startOmxBuild(sessionId);
+      if (build.status === 'stopped') {
+        throw new Error('OMX stop is still settling. Aguarde um instante e tente continuar novamente para iniciar um novo build.');
+      }
+      closeKompletusReport();
+
+      // ─── Activate OMX Build Mode ───
+      const { resetBuild, initNodeStates, startBuild, hydrateBuildLifecycle } = useBuildStore.getState();
+      const nodeIds = result.graph.nodes.map((n: { id: string }) => n.id);
+      resetBuild();
+      initNodeStates(nodeIds);
+      startBuild(build.status);
+      hydrateBuildLifecycle(build);
+      useGraphStore.getState().setAppMode('builder');
+
+      toast.success(`KOMPLETUS → OMX: real build ${build.buildId.slice(0, 8)} started`);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Failed to hand off KOMPLETUS blueprint to OMX');
+    }
   };
 
   return (

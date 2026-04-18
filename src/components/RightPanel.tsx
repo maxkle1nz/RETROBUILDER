@@ -3,6 +3,7 @@ import { useGraphStore } from '../store/useGraphStore';
 import { useBuildStore } from '../store/useBuildStore';
 import {
   activateSessionDraft,
+  createSession,
   ExportBlockedError,
   exportSessionDraftToOmx,
   getSessionGapsDraft,
@@ -10,6 +11,8 @@ import {
   getSessionReadinessDraft,
   performDeepResearch,
   runSessionAdvancedDraft,
+  saveSession,
+  startOmxBuild,
   type BlueprintGapReport,
   type BlueprintImpactReport,
   type BlueprintReadinessReport,
@@ -52,6 +55,7 @@ export default function RightPanel() {
     architecture,
     projectContext,
     updateNode,
+    hydrateSession,
   } = useGraphStore();
   const [tab, setTab] = useState<PanelTab>('ready');
   const [readiness, setReadiness] = useState<BlueprintReadinessReport | null>(null);
@@ -215,7 +219,39 @@ export default function RightPanel() {
     if (!activeSessionId) return;
     setExporting(true);
     try {
-      const result = await exportSessionDraftToOmx(activeSessionId, currentDraft);
+      const persistedSession = await saveSession(activeSessionId, {
+        name: activeSessionName || 'Untitled Blueprint',
+        manifesto,
+        architecture,
+        graph: graphData,
+        projectContext,
+        importMeta: importMeta || undefined,
+      }).catch(async () => {
+        const created = await createSession({
+          name: activeSessionName || 'Untitled Blueprint',
+          source: activeSessionSource || 'manual',
+          manifesto,
+          architecture,
+          graph: graphData,
+          projectContext,
+          importMeta: importMeta || undefined,
+        });
+        return created;
+      });
+      hydrateSession(persistedSession);
+
+      const runtimeDraft = {
+        ...currentDraft,
+        name: persistedSession.name,
+        source: persistedSession.source,
+        importMeta: persistedSession.importMeta || null,
+      };
+
+      const result = await exportSessionDraftToOmx(persistedSession.id, runtimeDraft);
+      const build = await startOmxBuild(persistedSession.id, runtimeDraft);
+      if (build.status === 'stopped') {
+        throw new Error('OMX stop is still settling. Aguarde um instante e tente iniciar novamente para obter um novo build.');
+      }
 
       // Download the OMX plan file
       const blob = new Blob(
@@ -231,20 +267,22 @@ export default function RightPanel() {
       setReadiness(result.readiness);
 
       // ─── Activate Build Mode ───
-      const nodeIds = graphData.nodes.map((n) => n.id);
-      useBuildStore.getState().resetBuild();
-      useBuildStore.getState().initNodeStates(nodeIds);
-      useBuildStore.getState().startBuild();
+      const nodeIds = persistedSession.graph.nodes.map((n) => n.id);
+      const { resetBuild, initNodeStates, startBuild, hydrateBuildLifecycle } = useBuildStore.getState();
+      resetBuild();
+      initNodeStates(nodeIds);
+      startBuild(build.status);
+      hydrateBuildLifecycle(build);
       useGraphStore.getState().setAppMode('builder');
 
-      toast.success('OMX plan exported — Build Mode activated');
+      toast.success(`OMX plan exported — real build ${build.buildId.slice(0, 8)} started`);
     } catch (error) {
       if (error instanceof ExportBlockedError) {
         setReadiness(error.readiness || null);
         toast.error(error.message);
       } else {
         console.error(error);
-        toast.error('Failed to export OMX plan');
+        toast.error(error instanceof Error ? error.message : 'Failed to export OMX plan');
       }
     } finally {
       setExporting(false);

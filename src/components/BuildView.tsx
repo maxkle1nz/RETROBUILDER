@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ReactFlow, Background, BackgroundVariant, MiniMap } from '@xyflow/react';
 import { useGraphStore } from '../store/useGraphStore';
 import { useBuildStore } from '../store/useBuildStore';
 import { useOMXStream } from '../hooks/useOMXStream';
+import { fetchOmxStatus, loadSession } from '../lib/api';
 import CyberNodeBuild from './CyberNodeBuild';
 import BuildConsole from './BuildConsole';
 import { motion } from 'motion/react';
@@ -12,12 +13,55 @@ import '@xyflow/react/dist/style.css';
 const nodeTypes = { cyber: CyberNodeBuild };
 
 export default function BuildView() {
-  const { graphData, activeSessionId, setAppMode } = useGraphStore();
+  const { graphData, activeSessionId, setAppMode, hydrateSession } = useGraphStore();
   const isBuilding = useBuildStore((s) => s.isBuilding);
+  const buildStatus = useBuildStore((s) => s.buildStatus);
   const buildProgress = useBuildStore((s) => s.buildProgress);
   const completedNodes = useBuildStore((s) => s.completedNodes);
   const totalNodes = useBuildStore((s) => s.totalNodes);
   const nodeStates = useBuildStore((s) => s.nodeStates);
+  const hydrateBuildLifecycle = useBuildStore((s) => s.hydrateBuildLifecycle);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    if (buildStatus === 'running' || buildStatus === 'queued' || buildStatus === 'stopping') return;
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const remote = await fetchOmxStatus(activeSessionId);
+        if (cancelled) return;
+
+        const shouldHydrateRemoteLifecycle =
+          remote.status === 'queued' ||
+          remote.status === 'running' ||
+          remote.status === 'stopping' ||
+          remote.status === 'stopped' ||
+          remote.status === 'succeeded' ||
+          remote.status === 'failed';
+
+        // Preserve terminal and in-flight lifecycle plus persisted terminal summaries on builder reentry.
+
+        if (!shouldHydrateRemoteLifecycle) {
+          return;
+        }
+
+        const session = await loadSession(activeSessionId);
+        if (cancelled) return;
+
+        hydrateSession(session);
+        useBuildStore.getState().initNodeStates(session.graph.nodes.map((n) => n.id));
+        hydrateBuildLifecycle(remote);
+      } catch (error) {
+        console.warn('[BuildView] Failed to hydrate remote OMX status:', error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, buildStatus, hydrateBuildLifecycle, hydrateSession]);
 
   // Only start SSE stream when a build is actually in progress
   useOMXStream(activeSessionId, isBuilding);

@@ -5,7 +5,7 @@ import { CheckCircle2, Circle, BrainCircuit, Activity, Rocket, Hammer, Loader2, 
 
 export default function Checklist() {
   const { graphData, appMode } = useGraphStore();
-  const { isBuilding, buildProgress, completedNodes, totalNodes: buildTotal, nodeStates, buildResult } = useBuildStore();
+  const { isBuilding, buildStatus, buildProgress, completedNodes, totalNodes: buildTotal, nodeStates, buildResult } = useBuildStore();
   
   const totalNodes = graphData.nodes.length;
   const completedGraphNodes = graphData.nodes.filter(n => n.status === 'completed').length;
@@ -49,16 +49,20 @@ export default function Checklist() {
 
             {/* Phase 2: Construction (live) */}
             <div className="relative">
-              <div className={`absolute left-3.5 top-8 bottom-[-20px] w-px ${buildResult ? 'bg-[#50fa7b]/30' : 'bg-border-subtle'}`} />
+              <div className={`absolute left-3.5 top-8 bottom-[-20px] w-px ${buildStatus === 'succeeded' ? 'bg-[#50fa7b]/30' : buildStatus === 'failed' ? 'bg-[#ff003c]/30' : buildStatus === 'stopped' ? 'bg-[#ffcb6b]/30' : 'bg-border-subtle'}`} />
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center shrink-0 border ${
-                  buildResult
+                  buildStatus === 'succeeded'
                     ? 'bg-[#50fa7b]/10 border-[#50fa7b]/40 text-[#50fa7b] shadow-[0_0_8px_rgba(80,250,123,0.3)]'
+                    : buildStatus === 'failed'
+                      ? 'bg-[#ff003c]/10 border-[#ff003c]/40 text-[#ff003c] shadow-[0_0_8px_rgba(255,0,60,0.25)]'
+                      : buildStatus === 'stopped'
+                        ? 'bg-[#ffcb6b]/10 border-[#ffcb6b]/40 text-[#ffcb6b] shadow-[0_0_8px_rgba(255,203,107,0.25)]'
                     : isBuilding
                       ? 'bg-accent-dim border-accent/50 text-accent'
                       : 'bg-bg border-border-subtle text-text-dim'
                 }`}>
-                  {buildResult ? <CheckCircle2 size={16} /> : isBuilding ? <Loader2 size={14} className="animate-spin" /> : <Circle size={16} />}
+                  {buildStatus === 'succeeded' ? <CheckCircle2 size={16} /> : buildStatus === 'failed' ? <AlertCircle size={16} /> : buildStatus === 'stopped' ? <AlertCircle size={16} /> : isBuilding ? <Loader2 size={14} className="animate-spin" /> : <Circle size={16} />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-[13px] font-medium text-text-main">2. Construction</h3>
@@ -127,14 +131,26 @@ export default function Checklist() {
             <div className="relative">
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center shrink-0 border ${
-                  buildResult ? 'bg-[#50fa7b]/10 border-[#50fa7b]/40 text-[#50fa7b] shadow-[0_0_8px_rgba(80,250,123,0.3)]' : 'bg-bg border-border-subtle text-text-dim'
+                  buildStatus === 'succeeded'
+                    ? 'bg-[#50fa7b]/10 border-[#50fa7b]/40 text-[#50fa7b] shadow-[0_0_8px_rgba(80,250,123,0.3)]'
+                    : buildStatus === 'failed'
+                      ? 'bg-[#ff003c]/10 border-[#ff003c]/40 text-[#ff003c] shadow-[0_0_8px_rgba(255,0,60,0.25)]'
+                      : buildStatus === 'stopped'
+                        ? 'bg-[#ffcb6b]/10 border-[#ffcb6b]/40 text-[#ffcb6b] shadow-[0_0_8px_rgba(255,203,107,0.25)]'
+                        : 'bg-bg border-border-subtle text-text-dim'
                 }`}>
-                  {buildResult ? <Rocket size={14} /> : <Circle size={16} />}
+                  {buildStatus === 'succeeded' ? <Rocket size={14} /> : buildStatus === 'failed' ? <AlertCircle size={14} /> : buildStatus === 'stopped' ? <AlertCircle size={14} /> : <Circle size={16} />}
                 </div>
                 <div>
-                  <h3 className={`text-[13px] font-medium ${buildResult ? 'text-text-main' : 'text-text-dim'}`}>3. Validation</h3>
+                  <h3 className={`text-[13px] font-medium ${buildStatus !== 'idle' ? 'text-text-main' : 'text-text-dim'}`}>3. Validation</h3>
                   <p className="text-[10px] text-text-dim mt-0.5">
-                    {buildResult ? `${buildResult.totalFiles} files · ${buildResult.totalLines.toLocaleString()} lines` : 'Awaiting completion'}
+                    {buildStatus === 'succeeded'
+                      ? `${buildResult?.totalFiles ?? 0} files · ${buildResult?.totalLines.toLocaleString() ?? '0'} lines`
+                      : buildStatus === 'failed'
+                        ? 'Build failed — inspect console for the terminal fault'
+                        : buildStatus === 'stopped'
+                          ? 'Build stopped by operator request'
+                          : 'Awaiting completion'}
                   </p>
                 </div>
               </div>

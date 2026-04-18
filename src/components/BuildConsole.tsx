@@ -24,7 +24,7 @@ export default function BuildConsole({ drawerMode = false, open = true, onClose 
   open?: boolean;
   onClose?: () => void;
 }) {
-  const { globalLogs, buildProgress, isBuilding, buildResult, completedNodes, totalNodes, activeNodeId, nodeStates } = useBuildStore();
+  const { globalLogs, buildProgress, isBuilding, buildStatus, buildResult, completedNodes, totalNodes, activeNodeId, nodeStates } = useBuildStore();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new logs
@@ -54,6 +54,10 @@ export default function BuildConsole({ drawerMode = false, open = true, onClose 
           <div className="text-[9px] font-mono text-text-dim uppercase tracking-widest">
             {isBuilding ? (
               <span className="text-[#ffcb6b] animate-pulse">● LIVE</span>
+            ) : buildStatus === 'failed' ? (
+              <span className="text-[#ff003c]">✗ FAILED</span>
+            ) : buildStatus === 'stopped' ? (
+              <span className="text-[#ffcb6b]">■ STOPPED</span>
             ) : buildResult ? (
               <span className="text-[#50fa7b]">✓ DONE</span>
             ) : (
@@ -135,7 +139,7 @@ export default function BuildConsole({ drawerMode = false, open = true, onClose 
       </div>
 
       {/* Build Result Screen */}
-      {buildResult && (
+      {buildResult && buildStatus !== 'failed' && buildStatus !== 'stopped' && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

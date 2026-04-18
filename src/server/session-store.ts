@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import crypto from 'node:crypto';
+import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import {
   GraphDataSchema,
   SessionDocumentSchema,
@@ -87,6 +87,7 @@ export interface SessionPatch {
 const ROOT_DIR = path.join(process.cwd(), '.retrobuilder');
 const SESSIONS_DIR = path.join(ROOT_DIR, 'sessions');
 const RUNTIME_DIR = path.join(ROOT_DIR, 'runtime');
+const sessionCleanupHooks = new Set<(sessionId: string) => Promise<void> | void>();
 
 function normalizeGraphData(input: unknown): SessionGraphData {
   const parsed = GraphDataSchema.parse(input);
@@ -126,6 +127,13 @@ async function ensureDirectories() {
 async function readSessionFile(filePath: string): Promise<SessionDocument> {
   const content = await readFile(filePath, 'utf8');
   return SessionDocumentSchema.parse(JSON.parse(content)) as SessionDocument;
+}
+
+export function registerSessionCleanupHook(handler: (sessionId: string) => Promise<void> | void) {
+  sessionCleanupHooks.add(handler);
+  return () => {
+    sessionCleanupHooks.delete(handler);
+  };
 }
 
 export async function ensureSessionStorage() {
@@ -168,7 +176,7 @@ export async function createSession(
   const now = new Date().toISOString();
   const graph = normalizeGraphData(input.graph || { nodes: [], links: [] });
   const session = SessionDocumentSchema.parse({
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     name: input.name.trim() || 'Untitled Blueprint',
     source: input.source || 'manual',
     createdAt: now,
@@ -211,8 +219,12 @@ export async function saveSession(id: string, patch: SessionPatch): Promise<Sess
 
 export async function deleteSession(id: string) {
   await ensureDirectories();
+  for (const handler of Array.from(sessionCleanupHooks)) {
+    await handler(id);
+  }
+  await rm(path.join(RUNTIME_DIR, id), { force: true, recursive: true, maxRetries: 5, retryDelay: 50 });
   await rm(sessionFilePath(id), { force: true });
-  await rm(path.join(RUNTIME_DIR, id), { force: true, recursive: true });
+  await rm(path.join(RUNTIME_DIR, id), { force: true, recursive: true, maxRetries: 5, retryDelay: 50 });
 }
 
 export function getRuntimeDirectory(sessionId: string) {

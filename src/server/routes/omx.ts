@@ -1,45 +1,97 @@
 import { Router } from 'express';
 import { createEphemeralSession, resolveSessionPayload } from '../session-payload.js';
 import { analyzeSessionReadiness } from '../session-analysis.js';
+import { attachOmxStream, getOmxStatus, startOmxBuild, stopOmxBuild } from '../omx-runtime.js';
 import { loadSession, type SessionDocument } from '../session-store.js';
-import { runOMXSimulation } from '../omx-runner.js';
 
 export function createOmxRouter() {
   const router = Router();
 
-  router.get('/api/omx/stream/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
-
-    let session;
-    try {
-      session = await loadSession(sessionId);
-    } catch {
-      res.status(404).json({ error: 'Session not found' });
-      return;
+  router.post('/api/omx/build', async (req, res) => {
+    const { sessionId, draft } = req.body || {};
+    if (!sessionId || typeof sessionId !== 'string') {
+      return res.status(400).json({ error: 'Missing sessionId.' });
     }
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
-
-    const keepAlive = setInterval(() => {
-      if (!res.writableEnded) res.write(':ping\n\n');
-    }, 15000);
-
-    req.on('close', () => clearInterval(keepAlive));
+    const session = await resolveSessionPayload(sessionId, draft);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
 
     try {
-      await runOMXSimulation(session.graph as any, res, req);
-    } catch (err) {
-      console.error('[OMX] Simulation error:', err);
+      const build = await startOmxBuild({
+        session,
+        source: draft ? 'session-draft' : 'persisted-session',
+      });
+      return res.status(202).json(build);
+    } catch (error) {
+      console.error('[OMX] Failed to start real build:', error);
+      const message = error instanceof Error ? error.message : 'Failed to start OMX build.';
+      const statusCode = /Codex CLI is unavailable/i.test(message) ? 503 : 500;
+      return res.status(statusCode).json({ error: message });
+    }
+  });
+
+  router.get('/api/omx/status/:sessionId', async (req, res) => {
+    const session = await loadSession(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    try {
+      const status = await getOmxStatus(req.params.sessionId);
+      return res.json(status);
+    } catch (error) {
+      console.error('[OMX] Failed to fetch build status:', error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to fetch OMX status.' });
+    }
+  });
+
+  router.post('/api/omx/stop/:sessionId', async (req, res) => {
+    const session = await loadSession(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    try {
+      const stopped = await stopOmxBuild(req.params.sessionId);
+      if (!stopped) {
+        const status = await getOmxStatus(req.params.sessionId);
+        return res.status(409).json({
+          sessionId: req.params.sessionId,
+          status: status.status,
+          error: 'No active build to stop.',
+        });
+      }
+      return res.status(202).json(stopped);
+    } catch (error) {
+      console.error('[OMX] Failed to stop build:', error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to stop OMX build.' });
+    }
+  });
+
+  router.get('/api/omx/stream/:sessionId', async (req, res) => {
+    const session = await loadSession(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    try {
+      const attached = await attachOmxStream(req.params.sessionId, req, res);
+      if (!attached) {
+        return res.status(409).json({ error: 'No active OMX build. Start a build before attaching to the stream.' });
+      }
+      return;
+    } catch (error) {
+      console.error('[OMX] Stream attachment error:', error);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to attach OMX stream.' });
+      }
       if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ type: 'node_error', nodeId: 'system', error: String(err), retrying: false })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'node_error', nodeId: 'system', error: String(error), retrying: false })}\n\n`);
         res.end();
       }
-    } finally {
-      clearInterval(keepAlive);
+      return;
     }
   });
 
