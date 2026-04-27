@@ -7,7 +7,7 @@
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[Why Retrobuilder](#why-retrobuilder) · [What You Can Build](#what-you-can-build) · [Getting Started](#getting-started) · [Current State](#current-state) · [Architecture](#architecture) · [Documentation](#documentation)
+[Why Retrobuilder](#why-retrobuilder) · [What You Can Build](#what-you-can-build) · [Getting Started](#getting-started) · [Architecture](#architecture) · [Docs](#documentation) · [Join](#join-the-team)
 
 </div>
 
@@ -470,6 +470,34 @@ These gaps are important and intentional to state explicitly:
 | Pipeline | KOMPLETUS + L1GHT pre-flight + Specular audit |
 | Build Runtime | real OMX lifecycle runtime with Codex transport checks |
 | Research | Perplexity, Serper, Semantic Scholar, CrossRef, GitHub, Jina |
+
+## Join the Team
+
+Retrobuilder is not a simple app, and it is not trying to be.
+It is a new construction layer for AI-native software: part visual architecture workbench, part agentic runtime, part design critic, part research system, and part build machine.
+
+We are looking for programmers, vibe coders, inventors, systems thinkers, interface designers, product engineers, and even poets who can see structure inside chaos.
+
+This project needs people who can move between imagination and execution. People who can prototype fast without losing rigor. People who can make software feel alive without letting it become fragile.
+
+We value proof over pedigree. Send something real: a repo, demo, essay, prototype, strange experiment, interface, game, automation, agent workflow, or one hard problem you could not stop thinking about.
+
+### Competencies We Need
+
+- Product systems and architecture: turning ambiguous ideas into modular blueprints, SSOTs, contracts, acceptance criteria, and runnable plans.
+- AI and agent runtime engineering: Codex/OpenAI/local-model workflows, tool orchestration, streaming, provider abstractions, retries, logs, and long-running build truth.
+- Frontend and interaction design: React, graph canvases, motion, responsive cockpit UX, product-grade flows, and design systems that do not feel generic.
+- Generated software and build pipelines: stack selection, templates, generated workspaces, verification scripts, preview links, run commands, and final handoff hardening.
+- Data, backend, and security: APIs, auth, RBAC, databases, audit trails, local-first security boundaries, dependency hygiene, and operational reliability.
+- Creative direction and product writing: narrative, naming, onboarding, prompt systems, demo concepts, visual taste, and weird useful ideas.
+
+### Apply
+
+Email [kleinz@cosmophonix.com](mailto:kleinz@cosmophonix.com?subject=Retrobuilder%20Team%20Application) with:
+- who you are and what kind of builder you are
+- 1-3 links to work you are proud of
+- the Retrobuilder lane you want to attack
+- one sentence about what you think software creation should feel like in 2026
 
 ## License
 
