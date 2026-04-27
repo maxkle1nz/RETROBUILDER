@@ -1,74 +1,71 @@
 <div align="center">
 
-**Design systems before you build them.**
+**A completely new way to design the system before you build the code.**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[Getting Started](#getting-started) · [Architecture](#architecture) · [Current State](#current-state) · [M1ND Mode](#m1nd-mode) · [OMX Runtime](#omx-runtime) · [Documentation](#documentation)
+[Why Retrobuilder](#why-retrobuilder) · [What You Can Build](#what-you-can-build) · [Getting Started](#getting-started) · [Current State](#current-state) · [Architecture](#architecture) · [Documentation](#documentation)
 
 </div>
 
 ---
 
-# M1ND // RETROBUILDER
+# RETROBUILDER
 
-> A session-first blueprint workbench that turns prompts into grounded system graphs, audits those graphs with m1nd, and hands validated plans into a live OMX build runtime.
+> Retrobuilder is the missing layer between an idea and a working product: a visual blueprint engine that turns prompts into connected architectures, validates the plan, and carries it from first thought to final run.
 
-RETROBUILDER sits between idea and implementation:
+Describe what you want to build. Retrobuilder turns it into a connected system blueprint before a single file is generated.
+
+It maps the right architecture, stack, data layer, frontend, backend, services, business rules, user flows, and design surfaces as connected cards you can inspect, edit, and validate.
+
+Then the blueprint becomes execution: contracts, generated workspace, verification, run scripts, preview links, and a clear path from first prompt to working build.
+
+No more loose AI-generated files. No more guessing how the pieces fit together. Retrobuilder keeps the product connected from idea to runtime.
 
 ```text
-Describe -> generate blueprint -> ground -> audit -> validate -> hand off -> watch build truth
+Prompt -> blueprint -> validated system -> generated workspace -> final run
 ```
 
-It is not just a graph toy and not just a code generator.
+Retrobuilder is a visual system builder for AI-native software creation. It is not just a graph toy and not just a code generator.
+
 The product today combines:
-- blueprint generation
-- deep research
+- connected blueprint generation
+- stack and module planning
+- design-aware UIX preparation
+- deep research and grounding
 - projected m1nd analysis
 - KOMPLETUS full-pipeline reporting
 - real OMX lifecycle handoff into BU1LDER mode
 
-## Why RETROBUILDER?
+## Why Retrobuilder?
 
-Most AI coding tools start from files.
-RETROBUILDER starts from architecture.
+Most AI coding tools start by generating files.
+Retrobuilder starts by modeling the product as a system.
 
-That means you can:
-- design module boundaries before writing code
-- attach contracts, acceptance criteria, and error handling to nodes
-- inspect structural blast radius and readiness before materialization
+That means you can design the whole build before the code appears:
+- choose an implementation path that fits the product instead of forcing a generic stack
+- connect database, frontend, backend, services, SSOT, design, and runtime as editable cards
+- attach contracts, acceptance criteria, and error handling before materialization
+- inspect structural blast radius and readiness while changes are still cheap
 - hand a curated blueprint into a real build runtime instead of guessing from prose
 
-## Current State
+```text
+Stop generating files. Start building systems.
+```
 
-Current main-branch baseline:
-- branch: `main`
-- package version: `0.6.1`
-- runtime floor: Node.js `>=22.0.0`
-- current focused verification: lint, production build, generated-workspace verification, SPECULAR route contracts, and SPECULAR showcase browser truth smoke pass on the working tree
-- working shape: session-backed blueprints + m1nd cockpit + KOMPLETUS + SPECULAR CREATE + real OMX runtime
+## What You Can Build
 
-Current codebase size snapshot:
-- TypeScript/TSX files in `src/`: 84
-- source LOC in `src/`: 29,925
-- rough function/export/arrow-function pattern matches in `src/`: 1,069
-- AI providers: 4
-- KOMPLETUS stages: 8
+Retrobuilder is domain-agnostic by design. The point is not to force every idea into one template; the point is to discover the right structure for the thing you are actually building.
 
-What is already real:
-- session launcher with backend persistence
-- ARCHITECT / M1ND / BU1LDER modes
-- Spotlight node search (`⌘K`)
-- NodeInspector + grounding actions + UIX editor
-- KOMPLETUS report with Specular + Specular Create surfaces
-- SPECULAR showcase route with browser-readable truth manifest (`#rb-specular-truth`)
-- OMX `build/status/stop/stream` lifecycle
-- 21st-backed design gate at OMX start/build status
-- builder reentry with persisted terminal truth
-- browser smoke tests for shell, SPECULAR showcase truth, blocked build, happy-path build, and resume flows
+Good fits include:
+- AI-native SaaS products with frontend, backend, database, billing, admin, and observability surfaces
+- internal tools, dashboards, CRMs, booking systems, and WhatsApp/customer-operation workflows
+- mobile-first customer apps with authenticated flows, subscriptions, invoices, and service history
+- creative software, interactive prototypes, and game-like experiences that need asset, scene, state, and runtime planning
+- operational systems where SSOT, permissions, audit trails, integrations, and reliability matter from day one
 
 ## Getting Started
 
@@ -196,6 +193,34 @@ npm run verify:providers:live
 ```
 
 That strict command first proves the local Codex bridge path, then sets `BRIDGE_REQUIRE_LIVE_PROFILES=1` and fails if the profile-backed Codex/Copilot lanes cannot complete real requests through THE BRIDGE.
+
+## Current State
+
+Current main-branch baseline:
+- branch: `main`
+- package version: `0.6.1`
+- runtime floor: Node.js `>=22.0.0`
+- current focused verification: lint, production build, generated-workspace verification, SPECULAR route contracts, and SPECULAR showcase browser truth smoke pass on the working tree
+- working shape: session-backed blueprints + m1nd cockpit + KOMPLETUS + SPECULAR CREATE + real OMX runtime
+
+Current codebase size snapshot:
+- TypeScript/TSX files in `src/`: 84
+- source LOC in `src/`: 29,925
+- rough function/export/arrow-function pattern matches in `src/`: 1,069
+- AI providers: 4
+- KOMPLETUS stages: 8
+
+What is already real:
+- session launcher with backend persistence
+- ARCHITECT / M1ND / BU1LDER modes
+- Spotlight node search (`⌘K`)
+- NodeInspector + grounding actions + UIX editor
+- KOMPLETUS report with Specular + Specular Create surfaces
+- SPECULAR showcase route with browser-readable truth manifest (`#rb-specular-truth`)
+- OMX `build/status/stop/stream` lifecycle
+- 21st-backed design gate at OMX start/build status
+- builder reentry with persisted terminal truth
+- browser smoke tests for shell, SPECULAR showcase truth, blocked build, happy-path build, and resume flows
 
 ## Architecture
 
