@@ -145,7 +145,7 @@ export function createGeminiProvider(): AIProvider {
       return geminiRequest(messages, config);
     },
 
-    async listModels(): Promise<ModelInfo[]> {
+    async listModels(_config?: CompletionConfig): Promise<ModelInfo[]> {
       try {
         const apiKey = rotator.current();
         const res = await fetch(`${GEMINI_BASE_URL}/models?key=${apiKey}`);
@@ -170,7 +170,7 @@ export function createGeminiProvider(): AIProvider {
       }
     },
 
-    async warmModel(model?: string): Promise<void> {
+    async warmModel(model?: string, _config?: CompletionConfig): Promise<void> {
       const apiKey = rotator.current();
       const m = model || GEMINI_DEFAULT_MODEL;
       try {

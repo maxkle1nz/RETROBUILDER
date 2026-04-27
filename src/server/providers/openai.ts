@@ -18,7 +18,8 @@ export function createOpenAIProvider(): AIProvider {
   if (!apiKey) {
     throw new Error(
       '[OpenAI] OPENAI_API_KEY environment variable is required. ' +
-      'Set it in .env.local or export it in your shell.'
+      'Set it in .env.local or export it in your shell. ' +
+      'Direct OpenAI mode does not reuse local ChatGPT/Codex OAuth; use THE BRIDGE for OAuth-backed models.'
     );
   }
 
@@ -62,7 +63,7 @@ export function createOpenAIProvider(): AIProvider {
       return content;
     },
 
-    async listModels(): Promise<ModelInfo[]> {
+    async listModels(_config?: CompletionConfig): Promise<ModelInfo[]> {
       try {
         const response = await client.models.list();
         const models: ModelInfo[] = [];

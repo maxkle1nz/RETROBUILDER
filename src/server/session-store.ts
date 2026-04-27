@@ -6,6 +6,7 @@ import {
   SessionDocumentSchema,
   SessionPatchSchema,
 } from './validation.js';
+import type { ActiveProductDnaContract } from './product-dna/product-dna-types.js';
 
 export type SessionSource = 'manual' | 'imported_codebase';
 
@@ -21,6 +22,88 @@ export interface SessionNodeData {
   error_handling?: string[];
   priority?: number;
   group: number;
+  designProfile?: '21st';
+  referenceCandidates?: Array<{
+    id: string;
+    title: string;
+    category: string;
+    rationale: string;
+    tags: string[];
+    source: '21st-local' | '21st-catalog' | 'retrobuilder-vanguard';
+    componentKey?: string;
+    author?: string;
+    componentUrl?: string;
+    promptUrl?: string;
+    previewUrl?: string;
+    localPath?: string;
+    promptPath?: string;
+    dependencies?: string[];
+    importSources?: string[];
+    patternId?: string;
+    sourcePromptName?: string;
+    stackAdapters?: Record<string, string[]>;
+    implementationNotes?: string[];
+    mobileRules?: string[];
+    tasteScore?: number;
+  }>;
+  selectedReferenceIds?: string[];
+  selectedProductDnaPackIds?: string[];
+  activeProductDnaContract?: ActiveProductDnaContract;
+  variantCandidates?: Array<{
+    id: string;
+    label: string;
+    description: string;
+    flavor: 'editorial' | 'control' | 'conversational';
+    screenType: 'dashboard' | 'form' | 'list' | 'detail' | 'chat' | 'wizard' | 'landing';
+    referenceIds: string[];
+    previewArtifact: {
+      kind: 'tsx';
+      componentName: string;
+      screenType: 'dashboard' | 'form' | 'list' | 'detail' | 'chat' | 'wizard' | 'landing';
+      summary: string;
+      blocks: Array<{
+        id: string;
+        kind: 'hero' | 'metrics' | 'list' | 'detail' | 'activity' | 'cta';
+        title: string;
+        eyebrow?: string;
+        body?: string;
+        items?: string[];
+      }>;
+      tsx: string;
+    };
+    designVerdict: {
+      status: 'pending' | 'passed' | 'failed';
+      score: number;
+      findings: string[];
+      evidence: string[];
+    };
+  }>;
+  selectedVariantId?: string;
+  previewArtifact?: {
+    kind: 'tsx';
+    componentName: string;
+    screenType: 'dashboard' | 'form' | 'list' | 'detail' | 'chat' | 'wizard' | 'landing';
+    summary: string;
+    blocks: Array<{
+      id: string;
+      kind: 'hero' | 'metrics' | 'list' | 'detail' | 'activity' | 'cta';
+      title: string;
+      eyebrow?: string;
+      body?: string;
+      items?: string[];
+    }>;
+    tsx: string;
+  };
+  previewState?: {
+    density: 'comfortable' | 'compact';
+    emphasis: 'editorial' | 'product' | 'dashboard';
+  };
+  designVerdict?: {
+    status: 'pending' | 'passed' | 'failed';
+    score: number;
+    findings: string[];
+    evidence: string[];
+  };
 }
 
 export interface SessionLinkData {

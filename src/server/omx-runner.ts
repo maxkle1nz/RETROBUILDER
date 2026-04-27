@@ -87,7 +87,7 @@ function topoSort(nodes: GraphNode[], links: Array<{ source: string; target: str
  *   1. "Generates" the backend implementation (simulate)
  *   2. Runs the mirror test against acceptance_criteria + data_contract
  *   3. If test fails → diagnoses → fixes → re-runs (up to MAX_ITERATIONS)
- *   4. If test passes → node is SPECULAR-certified
+ *   4. If test passes → node is SPECULAR gate-approved
  *
  * The loop emits SSE events so the UIX shows real-time SPECULAR progress.
  */
@@ -106,7 +106,7 @@ async function runSpecularLoop(
       nodeId: node.id,
       iteration: 0,
       status: 'passed',
-      message: 'No acceptance criteria — auto-certified',
+      message: 'No acceptance criteria — auto gate-approved',
     } satisfies SpecularLoopEvent);
     return { passed: true, iterations: 0, fixes: [] };
   }
@@ -170,7 +170,7 @@ async function runSpecularLoop(
     nodeId: node.id,
     iteration: SPECULAR_MAX_ITERATIONS,
     status: 'passed',
-    message: `SPECULAR certified after ${SPECULAR_MAX_ITERATIONS} iterations (${allFixes.length} fixes applied)`,
+    message: `SPECULAR gate-approved after ${SPECULAR_MAX_ITERATIONS} iterations (${allFixes.length} fixes applied)`,
     fixes: allFixes,
   } satisfies SpecularLoopEvent);
 
@@ -349,7 +349,7 @@ export async function runOMXSimulation(
         passed: specularPassed,
         total: ordered.length,
         fixesApplied: specularFixes,
-        certified: specularPassed === ordered.length,
+        gateApproved: specularPassed === ordered.length,
       },
     });
     // Signal SSE close

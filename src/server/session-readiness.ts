@@ -3,6 +3,8 @@ import { computeTopology, type AnalysisIssue } from './session-topology.js';
 import { type BlueprintReadinessReport, type ReadinessStatus } from './session-analysis.js';
 import { type SessionDocument } from './session-store.js';
 
+const NON_BLOCKING_READINESS_WARNING_CODES = new Set(['PRIORITY_DRIFT']);
+
 function safePct(part: number, total: number) {
   if (!total) return 0;
   return Math.round((part / total) * 100);
@@ -19,7 +21,7 @@ export async function analyzeSessionReadiness(session: SessionDocument): Promise
   if (topology.hasCycles) {
     blockers.push({
       code: 'CYCLE_DETECTED',
-      message: 'The blueprint contains cyclic dependencies and cannot be exported to Ralph.',
+      message: 'The blueprint contains cyclic dependencies and cannot be exported to OMX Builder.',
       nodeIds: topology.cycleNodeIds,
     });
   }
@@ -89,7 +91,8 @@ export async function analyzeSessionReadiness(session: SessionDocument): Promise
   }
 
   const projection = await ensureProjection(session);
-  const status: ReadinessStatus = blockers.length > 0 ? 'blocked' : warnings.length > 0 ? 'needs_review' : 'ready';
+  const actionableWarnings = warnings.filter((issue) => !NON_BLOCKING_READINESS_WARNING_CODES.has(issue.code));
+  const status: ReadinessStatus = blockers.length > 0 ? 'blocked' : actionableWarnings.length > 0 ? 'needs_review' : 'ready';
 
   return {
     status,

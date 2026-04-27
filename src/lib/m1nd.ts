@@ -8,6 +8,8 @@
  * All methods return null on failure for graceful degradation.
  */
 
+import { localApiAuthHeaders } from './local-api-auth';
+
 export interface M1ndHealthStatus {
   connected: boolean;
   nodeCount: number;
@@ -26,7 +28,7 @@ export class M1ndClient {
 
   async health(): Promise<M1ndHealthStatus> {
     try {
-      const res = await fetch(`${this.baseUrl}/health`);
+      const res = await fetch(`${this.baseUrl}/health`, { headers: localApiAuthHeaders() });
       if (!res.ok) return { connected: false, nodeCount: 0, edgeCount: 0, graphState: 'error' };
       return res.json();
     } catch {
@@ -120,7 +122,7 @@ export class M1ndClient {
     try {
       const res = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: localApiAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(body),
       });
       if (!res.ok) return null;

@@ -1,8 +1,55 @@
 import { Router } from 'express';
+import { spawn } from 'node:child_process';
+import { lstat, realpath, stat } from 'node:fs/promises';
+import * as path from 'node:path';
 import { createEphemeralSession, resolveSessionPayload } from '../session-payload.js';
 import { analyzeSessionReadiness } from '../session-analysis.js';
-import { attachOmxStream, getOmxStatus, startOmxBuild, stopOmxBuild } from '../omx-runtime.js';
-import { loadSession, type SessionDocument } from '../session-store.js';
+import { attachOmxStream, getOmxStatus, readOmxEventHistory, recordOmxOperationalMessage, reassignOmxTaskOwnership, resumeOmxBuild, retryOmxTask, startOmxBuild, stopOmxBuild } from '../omx-runtime.js';
+import { getRuntimeDirectory, loadSession, type SessionDocument } from '../session-store.js';
+import { compileExecutionGraph } from '../omx-scheduler.js';
+import { consolidatePresentationFrontendNodes } from '../graph-composition.js';
+
+async function workspaceInsideRuntime(sessionId: string, workspacePath: string) {
+  const runtimeDir = getRuntimeDirectory(sessionId);
+  const runtimeRoot = await realpath(runtimeDir).catch(() => path.resolve(runtimeDir));
+  const candidate = path.resolve(workspacePath);
+  if (candidate !== runtimeRoot && !candidate.startsWith(`${runtimeRoot}${path.sep}`)) {
+    return false;
+  }
+
+  const workspaceLinkStat = await lstat(workspacePath).catch(() => null);
+  if (!workspaceLinkStat) {
+    return true;
+  }
+  if (workspaceLinkStat.isSymbolicLink()) {
+    return false;
+  }
+
+  const canonicalCandidate = await realpath(workspacePath).catch(() => candidate);
+  return canonicalCandidate === runtimeRoot || canonicalCandidate.startsWith(`${runtimeRoot}${path.sep}`);
+}
+
+function openFolder(targetPath: string) {
+  const command = process.platform === 'darwin'
+    ? 'open'
+    : process.platform === 'win32'
+      ? 'cmd'
+      : 'xdg-open';
+  const args = process.platform === 'win32'
+    ? ['/c', 'start', '', targetPath]
+    : [targetPath];
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
 
 export function createOmxRouter() {
   const router = Router();
@@ -25,10 +72,125 @@ export function createOmxRouter() {
       });
       return res.status(202).json(build);
     } catch (error) {
-      console.error('[OMX] Failed to start real build:', error);
       const message = error instanceof Error ? error.message : 'Failed to start OMX build.';
-      const statusCode = /Codex CLI is unavailable/i.test(message) ? 503 : 500;
-      return res.status(statusCode).json({ error: message });
+      const isCodexUnavailable = /Codex CLI is unavailable/i.test(message);
+      const isDesignGateBlocked = /21st design gate blocked OMX build/i.test(message);
+      const statusCode = isCodexUnavailable
+        ? 503
+        : isDesignGateBlocked
+          ? 409
+          : 500;
+      const design = typeof error === 'object' && error && 'designSummary' in error
+        ? (error as { designSummary?: unknown }).designSummary
+        : undefined;
+
+      if (isDesignGateBlocked) {
+        const designSummary = design as {
+          failingNodeIds?: string[];
+          designScore?: number;
+        } | undefined;
+        const failingNodes = Array.isArray(designSummary?.failingNodeIds) && designSummary!.failingNodeIds.length > 0
+          ? designSummary!.failingNodeIds.join(',')
+          : 'unknown';
+        const score = typeof designSummary?.designScore === 'number' ? designSummary.designScore : 'unknown';
+        console.warn(`[OMX] Build blocked by 21st design gate. failingNodes=${failingNodes} score=${score}`);
+      } else {
+        console.error('[OMX] Failed to start real build:', error);
+      }
+
+      return res.status(statusCode).json(design ? { error: message, design } : { error: message });
+    }
+  });
+
+  router.post('/api/omx/resume', async (req, res) => {
+    const { sessionId, draft } = req.body || {};
+    if (!sessionId || typeof sessionId !== 'string') {
+      return res.status(400).json({ error: 'Missing sessionId.' });
+    }
+
+    const session = await resolveSessionPayload(sessionId, draft);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    try {
+      const build = await resumeOmxBuild({
+        session,
+        source: draft ? 'session-draft' : 'persisted-session',
+      });
+      return res.status(202).json(build);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to resume OMX build.';
+      const isCodexUnavailable = /Codex CLI is unavailable/i.test(message);
+      const isDesignGateBlocked = /21st design gate blocked OMX build/i.test(message);
+      const isNoResumableBuild = /No resumable OMX build found/i.test(message);
+      const statusCode = isCodexUnavailable ? 503 : isDesignGateBlocked ? 409 : isNoResumableBuild ? 409 : 500;
+      const design = typeof error === 'object' && error && 'designSummary' in error
+        ? (error as { designSummary?: unknown }).designSummary
+        : undefined;
+      return res.status(statusCode).json(design ? { error: message, design } : { error: message });
+    }
+  });
+
+  router.post('/api/omx/retry/:sessionId', async (req, res) => {
+    const { draft, taskId } = req.body || {};
+    if (!taskId || typeof taskId !== 'string') {
+      return res.status(400).json({ error: 'Missing taskId.' });
+    }
+
+    const session = await resolveSessionPayload(req.params.sessionId, draft);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    try {
+      const build = await retryOmxTask({
+        session,
+        source: draft ? 'session-draft' : 'persisted-session',
+        taskId,
+      });
+      return res.status(202).json(build);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to retry OMX task.';
+      const isCodexUnavailable = /Codex CLI is unavailable/i.test(message);
+      const isDesignGateBlocked = /21st design gate blocked OMX build/i.test(message);
+      const isRetryConflict = /No retryable OMX task found|Cannot retry/i.test(message);
+      const statusCode = isCodexUnavailable ? 503 : isDesignGateBlocked ? 409 : isRetryConflict ? 409 : 500;
+      const design = typeof error === 'object' && error && 'designSummary' in error
+        ? (error as { designSummary?: unknown }).designSummary
+        : undefined;
+      return res.status(statusCode).json(design ? { error: message, design } : { error: message });
+    }
+  });
+
+  router.post('/api/omx/reassign/:sessionId', async (req, res) => {
+    const { draft, taskId } = req.body || {};
+    if (!taskId || typeof taskId !== 'string') {
+      return res.status(400).json({ error: 'Missing taskId.' });
+    }
+
+    const session = await resolveSessionPayload(req.params.sessionId, draft);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    try {
+      const build = await reassignOmxTaskOwnership({
+        session,
+        source: draft ? 'session-draft' : 'persisted-session',
+        taskId,
+      });
+      return res.status(202).json(build);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to reassign OMX ownership.';
+      const isCodexUnavailable = /Codex CLI is unavailable/i.test(message);
+      const isDesignGateBlocked = /21st design gate blocked OMX build/i.test(message);
+      const isReassignConflict = /No reassignable OMX task found|No shared-owner lanes can be reassigned|Cannot reassign/i.test(message);
+      const statusCode = isCodexUnavailable ? 503 : isDesignGateBlocked ? 409 : isReassignConflict ? 409 : 500;
+      const design = typeof error === 'object' && error && 'designSummary' in error
+        ? (error as { designSummary?: unknown }).designSummary
+        : undefined;
+      return res.status(statusCode).json(design ? { error: message, design } : { error: message });
     }
   });
 
@@ -44,6 +206,68 @@ export function createOmxRouter() {
     } catch (error) {
       console.error('[OMX] Failed to fetch build status:', error);
       return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to fetch OMX status.' });
+    }
+  });
+
+  router.get('/api/omx/history/:sessionId', async (req, res) => {
+    const session = await loadSession(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    try {
+      const buildId = typeof req.query.buildId === 'string' ? req.query.buildId : undefined;
+      const events = await readOmxEventHistory(req.params.sessionId, buildId);
+      return res.json({ events });
+    } catch (error) {
+      console.error('[OMX] Failed to read build history:', error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to read OMX history.' });
+    }
+  });
+
+  router.post('/api/omx/open-project/:sessionId', async (req, res) => {
+    const session = await loadSession(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    try {
+      const status = await getOmxStatus(req.params.sessionId);
+      const workspacePath = status.result?.documentation?.workspacePath || status.workspacePath;
+      if (!workspacePath || !(await workspaceInsideRuntime(req.params.sessionId, workspacePath))) {
+        return res.status(409).json({ error: 'No safe generated workspace is available for this session.' });
+      }
+
+      const workspaceStat = await stat(workspacePath).catch(() => null);
+      if (!workspaceStat?.isDirectory()) {
+        return res.status(404).json({ error: 'Generated workspace folder was not found.' });
+      }
+
+      await openFolder(workspacePath);
+      return res.status(202).json({ ok: true, workspacePath });
+    } catch (error) {
+      console.error('[OMX] Failed to open generated project:', error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to open generated project.' });
+    }
+  });
+
+  router.post('/api/omx/operation/:sessionId', async (req, res) => {
+    const session = await loadSession(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    const { role, action, message } = req.body || {};
+    if ((role !== 'user' && role !== 'system') || typeof action !== 'string' || typeof message !== 'string') {
+      return res.status(400).json({ error: 'Missing operational message payload.' });
+    }
+
+    try {
+      await recordOmxOperationalMessage(req.params.sessionId, { role, action, message });
+      return res.status(202).json({ ok: true });
+    } catch (error) {
+      console.error('[OMX] Failed to persist operational message:', error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to persist operational message.' });
     }
   });
 
@@ -117,58 +341,22 @@ export function createOmxRouter() {
         const readiness = await analyzeSessionReadiness(sourceSession);
         if (!readiness.exportAllowed) {
           return res.status(409).json({
-            error: 'Blueprint is blocked and cannot be exported to Ralph yet.',
+            error: 'Blueprint is blocked and cannot be exported to OMX Builder yet.',
             readiness,
           });
         }
 
-        const nodes = [...sourceSession.graph.nodes];
-        const links = sourceSession.graph.links || [];
-
-        const inDegree = new Map<string, number>();
-        const dependents = new Map<string, string[]>();
-        for (const n of nodes) {
-          inDegree.set(n.id, 0);
-          dependents.set(n.id, []);
-        }
-        for (const l of links) {
-          inDegree.set(l.target, (inDegree.get(l.target) || 0) + 1);
-          if (!dependents.has(l.source)) dependents.set(l.source, []);
-          dependents.get(l.source)!.push(l.target);
-        }
-
-        const queue: string[] = [];
-        const order = new Map<string, number>();
-        for (const [id, deg] of inDegree) {
-          if (deg === 0) queue.push(id);
-        }
-
-        let level = 1;
-        while (queue.length > 0) {
-          const batch = [...queue];
-          queue.length = 0;
-          for (const id of batch) {
-            order.set(id, level);
-            for (const dep of dependents.get(id) || []) {
-              const newDeg = (inDegree.get(dep) || 1) - 1;
-              inDegree.set(dep, newDeg);
-              if (newDeg === 0) queue.push(dep);
-            }
-          }
-          level++;
-        }
-
-        for (const n of nodes) {
-          if (!n.priority) {
-            n.priority = order.get(n.id) || 1;
-          }
-        }
-
-        const phases = new Map<number, typeof nodes>();
-        for (const n of nodes) {
-          const p = n.priority || 1;
-          if (!phases.has(p)) phases.set(p, []);
-          phases.get(p)!.push(n);
+        const deliveryGraph = consolidatePresentationFrontendNodes(sourceSession.graph);
+        const nodes = [...deliveryGraph.nodes];
+        const executionGraph = compileExecutionGraph({ ...sourceSession, graph: deliveryGraph }, 1);
+        const phases = new Map<string, typeof nodes>();
+        for (const wave of executionGraph.waves) {
+          const waveNodes = wave.taskIds
+            .map((taskId) => executionGraph.tasks.find((task) => task.taskId === taskId))
+            .filter(Boolean)
+            .map((task) => nodes.find((node: any) => node.id === task!.nodeId))
+            .filter(Boolean) as typeof nodes;
+          phases.set(wave.waveId, waveNodes);
         }
 
         const planLines: string[] = [
@@ -179,15 +367,15 @@ export function createOmxRouter() {
           '',
         ];
 
-        const sortedPhases = [...phases.keys()].sort((a, b) => a - b);
+        const sortedPhases = executionGraph.waves.map((wave) => wave.waveId);
         const phaseNames = ['', 'Foundation', 'Core Services', 'Integration', 'Interface', 'Polish', 'Optimization'];
 
-        for (const p of sortedPhases) {
-          const phaseName = phaseNames[Math.min(p, phaseNames.length - 1)] || `Phase ${p}`;
-          planLines.push(`## Phase ${p}: ${phaseName} (priority ${p})`);
+        for (const [index, waveId] of sortedPhases.entries()) {
+          const phaseName = phaseNames[Math.min(index + 1, phaseNames.length - 1)] || `Wave ${index + 1}`;
+          planLines.push(`## ${waveId}: ${phaseName}`);
           planLines.push('');
 
-          for (const n of phases.get(p)!) {
+          for (const n of phases.get(waveId) || []) {
             planLines.push(`### ${n.label}`);
             planLines.push(`- **Type:** ${n.type}`);
             planLines.push(`- **Description:** ${n.description}`);
@@ -198,12 +386,18 @@ export function createOmxRouter() {
               planLines.push(`- **Rationale:** ${n.decision_rationale}`);
             }
 
-            const deps = links.filter((l: any) => l.target === n.id).map((l: any) => {
-              const src = nodes.find((nn: any) => nn.id === l.source);
-              return src ? src.label : l.source;
+            const task = executionGraph.tasks.find((entry) => entry.nodeId === n.id);
+            const deps = (task?.dependsOnTaskIds || []).map((taskId) => {
+              const upstream = executionGraph.tasks.find((entry) => entry.taskId === taskId);
+              return upstream ? upstream.label : taskId;
             });
             if (deps.length > 0) {
               planLines.push(`- **Depends on:** ${deps.join(', ')}`);
+            }
+            if (task) {
+              planLines.push(`- **Task:** ${task.taskId}`);
+              planLines.push(`- **Write Set:** ${task.writeSet.join(', ')}`);
+              planLines.push(`- **Verify:** ${task.verifyCommand}`);
             }
 
             if (n.acceptance_criteria && n.acceptance_criteria.length > 0) {
@@ -236,20 +430,20 @@ export function createOmxRouter() {
           sourceSession.architecture || 'No architecture specified.',
           '',
           '## Build Order',
-          'Execute modules in priority order. Lower numbers are built first.',
-          'Do NOT start a higher-priority module until all its dependencies are verified.',
+          'Execute tasks in wave order. A later wave cannot start until the previous wave is verified and merged.',
+          'Inside a wave, tasks are sorted by priority asc and estimated cost desc.',
           '',
           '## Verification Rules',
           '- Each module has explicit acceptance criteria',
-          '- A module is COMPLETE only when ALL acceptance criteria pass',
-          '- Run tests after each module completion',
-          '- If a criterion fails, fix and re-verify before proceeding',
+          '- A task is COMPLETE only when verify passes and merge applies',
+          '- Tasks may not write outside their write set',
+          '- If verify or merge fails, the wave stops and becomes resumable',
           '',
           '## Module Summary',
         ];
 
-        for (const n of nodes.sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0))) {
-          agentsLines.push(`- **${n.label}** (P${n.priority || '?'}, ${n.type}): ${n.description.substring(0, 100)}`);
+        for (const task of executionGraph.tasks) {
+          agentsLines.push(`- **${task.label}** (${task.waveId}, P${task.priority}, ${task.type}): node ${task.nodeId}`);
         }
 
         const plan = planLines.join('\n');
@@ -261,11 +455,9 @@ export function createOmxRouter() {
           readiness,
           stats: {
             totalNodes: nodes.length,
-            totalPhases: sortedPhases.length,
+            totalPhases: executionGraph.waves.length,
             totalAcceptanceCriteria: nodes.reduce((sum: number, n: any) => sum + (n.acceptance_criteria?.length || 0), 0),
-            buildOrder: nodes
-              .sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0))
-              .map((n: any) => ({ id: n.id, label: n.label, priority: n.priority })),
+            buildOrder: executionGraph.tasks.map((task) => ({ id: task.nodeId, label: task.label, priority: task.priority, waveId: task.waveId })),
           },
         });
       } catch (e: any) {

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { access, readFile, stat } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import type { ChatMessage, CompletionConfig } from './providers/index.js';
 import {
   createSession,
@@ -10,6 +10,7 @@ import {
 import { getM1ndBridge } from './m1nd-bridge.js';
 import { validateAIResponse, SystemStateSchema } from './validation.js';
 import { analyzeSessionReadiness } from './session-analysis.js';
+import { guardLocalPath } from './local-path-guard.js';
 
 export interface CodebaseImportReport {
   session: SessionDocument;
@@ -91,11 +92,8 @@ export async function importCodebaseToSession(
   completeChat: (messages: ChatMessage[], config?: CompletionConfig) => Promise<string>,
   model?: string,
 ): Promise<CodebaseImportReport> {
-  const resolvedPath = path.resolve(codebasePath);
-  const codebaseStat = await stat(resolvedPath);
-  if (!codebaseStat.isDirectory()) {
-    throw new Error('The provided codebase path must be a directory.');
-  }
+  const guardedPath = await guardLocalPath(codebasePath, { kind: 'codebase', requireDirectory: true });
+  const resolvedPath = guardedPath.realPath;
 
   const summary = await buildCodebaseSummary(resolvedPath);
   const importedAt = new Date().toISOString();
@@ -180,7 +178,7 @@ Generate a RETROBUILDER blueprint for this codebase.`,
       confidence: summary.topFiles.length >= 3 ? 0.78 : 0.62,
       notes: [
         'Blueprint synthesized from real codebase structure.',
-        'Review acceptance criteria and priorities before exporting to Ralph.',
+        'Review acceptance criteria and priorities before exporting to OMX Builder.',
       ],
       summary: `Imported ${summary.metrics?.summary?.total_files || summary.ingestResult?.files_parsed || 0} files from ${repoName}.`,
       sourceStats: {

@@ -8,16 +8,17 @@ import {
 } from '../ai-workflows.js';
 import { runKompletusPipeline } from '../kompletus-pipeline.js';
 import { getActiveProvider } from '../provider-runtime.js';
+import { createProvider } from '../providers/index.js';
 
 export function createAiRouter() {
   const router = Router();
 
   router.post('/api/ai/warmup', (req, res) => {
-    const { model } = req.body;
-    const provider = getActiveProvider();
+    const { model, provider: providerName, authProfile } = req.body;
+    const provider = providerName ? createProvider(providerName) : getActiveProvider();
     if (provider.warmModel) {
-      provider.warmModel(model).catch(() => {});
-      res.json({ status: 'warming', model: model || provider.defaultModel });
+      provider.warmModel(model, authProfile ? { authProfile, model } : { model }).catch(() => {});
+      res.json({ status: 'warming', provider: provider.name, authProfile: authProfile || null, model: model || provider.defaultModel });
     } else {
       res.json({ status: 'not_needed', provider: provider.name });
     }
@@ -33,7 +34,10 @@ export function createAiRouter() {
       res.json(result);
     } catch (e: any) {
       console.error('[SSOT] Failed to generate graph structure:', e.message);
-      res.status(500).json({ error: e.message || 'Failed to generate graph structure' });
+      res.status(e.statusCode || 500).json({
+        error: e.message || 'Failed to generate graph structure',
+        code: e.code || 'GRAPH_GENERATION_FAILED',
+      });
     }
   });
 

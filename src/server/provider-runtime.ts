@@ -1,4 +1,6 @@
 import { createProvider, getProviderNames, PROVIDER_FACTORIES, type AIProvider, type ChatMessage } from './providers/index.js';
+import { ensureBridgeRuntime, inspectBridgeRuntime } from './bridge-bootstrap.js';
+import { resolveAuthProfile } from './auth-profile-store.js';
 
 export type CompletionConfigLike = {
   model?: string;
@@ -10,28 +12,83 @@ export type CompletionConfigLike = {
 export type ProviderProbe = {
   status: 'ready' | 'offline' | 'blocked' | 'missing_config';
   error?: string;
+  runtime?: {
+    baseUrl?: string;
+      command?: string;
+      installed?: boolean;
+      autoStart?: boolean;
+      autoStarted?: boolean;
+      healthy?: boolean;
+      authProfile?: string | null;
+    authProfileProvider?: string | null;
+    protocol?: 'openai_compat' | 'standalone';
+    source?: 'env' | 'path' | 'donor';
+  };
 };
 
 let activeProvider: AIProvider | null = null;
 
-function resolvePreferredProviderName() {
-  const configured = process.env.AI_PROVIDER;
+const LOCAL_BOOT_PROVIDER = 'bridge';
+
+function strictSelectedProviderModeEnabled() {
+  return process.env.AI_STRICT_PROVIDER_MODE !== '0';
+}
+
+function configuredProviderName() {
+  const configured = process.env.AI_PROVIDER?.trim();
   if (configured && configured in PROVIDER_FACTORIES) {
     return configured;
   }
-  return 'xai';
+  return null;
+}
+
+function hasProviderBootConfig(providerName: string) {
+  switch (providerName) {
+    case 'xai':
+      return Boolean(process.env.XAI_API_KEY);
+    case 'openai':
+      return Boolean(process.env.OPENAI_API_KEY);
+    case 'gemini':
+      return Boolean(process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY);
+    case 'bridge':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function resolvePreferredProviderName() {
+  const configured = configuredProviderName();
+  if (configured && hasProviderBootConfig(configured)) {
+    return configured;
+  }
+  return LOCAL_BOOT_PROVIDER;
+}
+
+function bootProviderOrder() {
+  const configured = configuredProviderName();
+  return [...new Set([
+    configured,
+    resolvePreferredProviderName(),
+    LOCAL_BOOT_PROVIDER,
+    'gemini',
+    'openai',
+    'xai',
+  ].filter(Boolean) as string[])];
 }
 
 function createBootSafeProvider() {
-  try {
-    return createProvider();
-  } catch (error: any) {
-    const fallback = resolvePreferredProviderName();
-    console.warn(
-      `[SSOT] Failed to initialize configured provider "${process.env.AI_PROVIDER || 'unset'}": ${error.message}. Falling back to ${fallback}.`,
-    );
-    return createProvider(fallback);
+  const attempted: string[] = [];
+
+  for (const providerName of bootProviderOrder()) {
+    try {
+      return createProvider(providerName);
+    } catch (error: any) {
+      attempted.push(`${providerName}: ${error.message || 'unavailable'}`);
+    }
   }
+
+  throw new Error(`[SSOT] Failed to initialize any AI provider — ${attempted.join(' | ')}`);
 }
 
 export function getActiveProvider() {
@@ -58,6 +115,10 @@ function fallbackProviderOrder(activeProviderName: string): string[] {
   return [...new Set(ordered.filter(Boolean))];
 }
 
+function bridgeUnavailableMessage(baseUrl: string) {
+  return `[BRIDGE] THE BRIDGE is not reachable at ${baseUrl}. Install/start THE BRIDGE and verify ${baseUrl}/health.`;
+}
+
 export async function chatCompletionWithFallback(
   messages: ChatMessage[],
   config: CompletionConfigLike,
@@ -65,6 +126,23 @@ export async function chatCompletionWithFallback(
 ): Promise<{ content: string; providerName: string; providerLabel: string; fallbackUsed: boolean }> {
   const attempted: string[] = [];
   const current = getActiveProvider();
+  const strictSelectedProviderMode = strictSelectedProviderModeEnabled();
+
+  if (strictSelectedProviderMode) {
+    try {
+      const content = await current.chatCompletion(messages, config);
+      return {
+        content,
+        providerName: current.name,
+        providerLabel: current.label,
+        fallbackUsed: false,
+      };
+    } catch (error: any) {
+      attempted.push(`${current.name}: ${error.message || 'request failed'}`);
+      console.warn(`[SSOT] ${purpose} failed on selected provider ${current.name}: ${error.message}`);
+      throw new Error(`[AI] ${purpose} failed on selected provider ${current.name} — ${attempted.join(' | ')}`);
+    }
+  }
 
   for (const providerName of fallbackProviderOrder(current.name)) {
     let candidate: AIProvider;
@@ -114,7 +192,12 @@ export async function probeProviderHealth(providerName: string): Promise<Provide
       }
       case 'openai': {
         if (!process.env.OPENAI_API_KEY) {
-          return { status: 'missing_config', error: '[OpenAI] OPENAI_API_KEY environment variable is required.' };
+          return {
+            status: 'missing_config',
+            error:
+              '[OpenAI] OPENAI_API_KEY environment variable is required. ' +
+              'Direct OpenAI mode does not reuse local ChatGPT/Codex OAuth; use THE BRIDGE for OAuth-backed models.',
+          };
         }
         const res = await fetch('https://api.openai.com/v1/models', {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
@@ -129,10 +212,62 @@ export async function probeProviderHealth(providerName: string): Promise<Provide
       }
       case 'bridge': {
         const baseUrl = (process.env.THEBRIDGE_URL || 'http://127.0.0.1:7788/v1').replace(/\/v1$/, '');
-        const res = await fetch(`${baseUrl}/health`, { signal: timeout });
-        if (res.ok) return { status: 'ready' };
-        const body = await res.text();
-        return { status: 'offline', error: `[BRIDGE] ${res.status} ${body}`.slice(0, 300) };
+        const bridgeRuntime = await ensureBridgeRuntime();
+        const authProfile = await resolveAuthProfile(process.env.THEBRIDGE_AUTH_PROFILE || null);
+        if (bridgeRuntime.ok) {
+          return {
+            status: 'ready',
+            runtime: {
+              baseUrl: bridgeRuntime.baseUrl,
+              command: bridgeRuntime.command,
+              installed: bridgeRuntime.installed,
+              autoStart: bridgeRuntime.autoStart,
+              autoStarted: bridgeRuntime.autoStarted,
+              healthy: true,
+              authProfile: process.env.THEBRIDGE_AUTH_PROFILE || null,
+              authProfileProvider: authProfile?.provider || null,
+              protocol: bridgeRuntime.protocol,
+              source: bridgeRuntime.source,
+            },
+          };
+        }
+        if (!bridgeRuntime.installed) {
+          return {
+            status: 'offline',
+            error: `[BRIDGE] THE BRIDGE command is not installed (${bridgeRuntime.command}). Install it or point THEBRIDGE_COMMAND to a valid executable. Expected health at ${baseUrl}.`,
+            runtime: {
+              baseUrl: bridgeRuntime.baseUrl,
+                command: bridgeRuntime.command,
+                installed: false,
+                autoStart: bridgeRuntime.autoStart,
+                autoStarted: false,
+                healthy: false,
+              authProfile: process.env.THEBRIDGE_AUTH_PROFILE || null,
+              authProfileProvider: authProfile?.provider || null,
+              protocol: bridgeRuntime.protocol,
+              source: bridgeRuntime.source,
+            },
+          };
+        }
+        const inspection = await inspectBridgeRuntime();
+        return {
+          status: 'offline',
+          error: inspection.autoStart
+            ? bridgeUnavailableMessage(baseUrl)
+            : `${bridgeUnavailableMessage(baseUrl)} Auto-start is disabled; set THEBRIDGE_AUTO_START=1 to allow RETROBUILDER to launch ${inspection.command}.`,
+          runtime: {
+            baseUrl: inspection.baseUrl,
+              command: inspection.command,
+              installed: inspection.installed,
+              autoStart: inspection.autoStart,
+              autoStarted: false,
+              healthy: inspection.healthy,
+              authProfile: process.env.THEBRIDGE_AUTH_PROFILE || null,
+              authProfileProvider: authProfile?.provider || null,
+              protocol: inspection.protocol,
+              source: inspection.source,
+            },
+        };
       }
       case 'gemini': {
         const geminiKey = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '').split(',')[0]?.trim();
@@ -156,7 +291,10 @@ export async function probeProviderHealth(providerName: string): Promise<Provide
   } catch (error: any) {
     return {
       status: providerName === 'bridge' ? 'offline' : 'blocked',
-      error: `[${providerName}] ${error.message || 'Probe failed'}`,
+      error:
+        providerName === 'bridge'
+          ? bridgeUnavailableMessage((process.env.THEBRIDGE_URL || 'http://127.0.0.1:7788/v1').replace(/\/v1$/, ''))
+          : `[${providerName}] ${error.message || 'Probe failed'}`,
     };
   }
 }
@@ -177,6 +315,7 @@ export async function collectProviderStates() {
         active: p.name === currentName,
         status: probe.status,
         error: probe.error,
+        runtime: probe.runtime,
       });
     } catch (e: any) {
       providers.push({
@@ -186,6 +325,7 @@ export async function collectProviderStates() {
         active: name === currentName,
         status: probe.status,
         error: probe.error || e.message,
+        runtime: probe.runtime,
       });
     }
   }

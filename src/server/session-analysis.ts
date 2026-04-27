@@ -77,6 +77,7 @@ export interface SessionAdvancedReport {
 const preparedSessions = new Map<string, string>();
 const runtimeArtifactFingerprints = new Map<string, string>();
 let lastProjectedSessionId: string | null = null;
+const NON_BLOCKING_READINESS_WARNING_CODES = new Set(['PRIORITY_DRIFT']);
 
 function slugify(value: string) {
   return value
@@ -314,7 +315,7 @@ export async function analyzeSessionReadiness(session: SessionDocument): Promise
   if (topology.hasCycles) {
     blockers.push({
       code: 'CYCLE_DETECTED',
-      message: 'The blueprint contains cyclic dependencies and cannot be exported to Ralph.',
+      message: 'The blueprint contains cyclic dependencies and cannot be exported to OMX Builder.',
       nodeIds: topology.cycleNodeIds,
     });
   }
@@ -384,7 +385,8 @@ export async function analyzeSessionReadiness(session: SessionDocument): Promise
   }
 
   const projection = await ensureProjection(session);
-  const status: ReadinessStatus = blockers.length > 0 ? 'blocked' : warnings.length > 0 ? 'needs_review' : 'ready';
+  const actionableWarnings = warnings.filter((issue) => !NON_BLOCKING_READINESS_WARNING_CODES.has(issue.code));
+  const status: ReadinessStatus = blockers.length > 0 ? 'blocked' : actionableWarnings.length > 0 ? 'needs_review' : 'ready';
 
   return {
     status,

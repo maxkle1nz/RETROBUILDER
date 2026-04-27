@@ -19,6 +19,9 @@
 
 import { spawn, type ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
+import { accessSync, constants } from 'fs';
+import { homedir } from 'os';
+import path from 'path';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -56,6 +59,28 @@ export interface M1ndStructuralContext {
   coChangePredictions: any | null;
   riskScore: any | null;
   layerViolations: any[];
+}
+
+function resolveM1ndCommand() {
+  const configured = process.env.M1ND_MCP_COMMAND?.trim();
+  if (configured) return configured;
+
+  const codexBundledM1nd = path.join(homedir(), '.codex/bin/m1nd-mcp');
+  try {
+    accessSync(codexBundledM1nd, constants.X_OK);
+    return codexBundledM1nd;
+  } catch {
+    return 'm1nd-mcp';
+  }
+}
+
+function resolveM1ndArgs() {
+  const configured = process.env.M1ND_MCP_ARGS?.trim();
+  if (configured) return configured.split(/\s+/).filter(Boolean);
+
+  // Retrobuilder uses m1nd over stdio. The embedded GUI is optional and can
+  // conflict with another GUI already bound to the default 127.0.0.1:1337.
+  return ['--no-gui'];
 }
 
 function normalizeActivationLabel(value: unknown): string {
@@ -115,11 +140,13 @@ export class M1ndBridge extends EventEmitter {
   private maxReconnectAttempts = 5;
   private agentId: string;
   private m1ndCommand: string;
+  private m1ndArgs: string[];
 
-  constructor(agentId: string = 'retrobuilder', m1ndCommand: string = 'm1nd-mcp') {
+  constructor(agentId: string = 'retrobuilder', m1ndCommand: string = 'm1nd-mcp', m1ndArgs: string[] = ['--no-gui']) {
     super();
     this.agentId = agentId;
     this.m1ndCommand = m1ndCommand;
+    this.m1ndArgs = m1ndArgs;
   }
 
   // ─── Lifecycle ───────────────────────────────────────────────────
@@ -132,7 +159,8 @@ export class M1ndBridge extends EventEmitter {
     if (this.connected) return true;
 
     try {
-      this.process = spawn(this.m1ndCommand, [], {
+      console.log(`[m1nd-bridge] Spawning ${[this.m1ndCommand, ...this.m1ndArgs].join(' ')}`);
+      this.process = spawn(this.m1ndCommand, this.m1ndArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env },
       });
@@ -546,7 +574,7 @@ let bridge: M1ndBridge | null = null;
  */
 export function getM1ndBridge(): M1ndBridge {
   if (!bridge) {
-    bridge = new M1ndBridge('retrobuilder', 'm1nd-mcp');
+    bridge = new M1ndBridge('retrobuilder', resolveM1ndCommand(), resolveM1ndArgs());
   }
   return bridge;
 }

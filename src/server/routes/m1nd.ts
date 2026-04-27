@@ -1,5 +1,14 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { getM1ndBridge } from '../m1nd-bridge.js';
+import { guardLocalPath, isLocalPathAccessError } from '../local-path-guard.js';
+
+function sendPathGuardError(res: Response, error: unknown) {
+  if (isLocalPathAccessError(error)) {
+    res.status(error.statusCode).json({ error: error.message, code: error.code });
+    return true;
+  }
+  return false;
+}
 
 export function createM1ndRouter() {
   const router = Router();
@@ -88,33 +97,68 @@ export function createM1ndRouter() {
   router.post('/api/m1nd/ingest', async (req, res) => {
     const { path: codePath, adapter, mode } = req.body;
     if (!codePath) return res.status(400).json({ error: "Missing 'path'" });
-    const result = await getM1ndBridge().ingest(codePath, adapter || 'code', mode || 'replace');
-    res.json(result || { error: 'm1nd offline' });
+    try {
+      const guardedPath = await guardLocalPath(codePath, { kind: 'codebase' });
+      const result = await getM1ndBridge().ingest(guardedPath.realPath, adapter || 'code', mode || 'replace');
+      res.json(result || { error: 'm1nd offline' });
+    } catch (error) {
+      if (!sendPathGuardError(res, error)) {
+        res.status(500).json({ error: error instanceof Error ? error.message : 'm1nd ingest failed' });
+      }
+    }
   });
 
   router.post('/api/m1nd/structural-context', async (req, res) => {
     const { file_path, symbol } = req.body;
     if (!file_path) return res.status(400).json({ error: "Missing 'file_path'" });
-    const result = await getM1ndBridge().surgicalContext(file_path, symbol);
-    res.json(result || { error: 'm1nd offline' });
+    try {
+      const guardedPath = await guardLocalPath(file_path, { kind: 'file' });
+      const result = await getM1ndBridge().surgicalContext(guardedPath.realPath, symbol);
+      res.json(result || { error: 'm1nd offline' });
+    } catch (error) {
+      if (!sendPathGuardError(res, error)) {
+        res.status(500).json({ error: error instanceof Error ? error.message : 'm1nd structural context failed' });
+      }
+    }
   });
 
   router.post('/api/m1nd/document/resolve', async (req, res) => {
     const { path: docPath, node_id } = req.body;
-    const result = await getM1ndBridge().documentResolve(docPath, node_id);
-    res.json(result || { error: 'm1nd offline' });
+    try {
+      const guardedPath = docPath ? await guardLocalPath(docPath, { kind: 'document' }) : null;
+      const result = await getM1ndBridge().documentResolve(guardedPath?.realPath, node_id);
+      res.json(result || { error: 'm1nd offline' });
+    } catch (error) {
+      if (!sendPathGuardError(res, error)) {
+        res.status(500).json({ error: error instanceof Error ? error.message : 'm1nd document resolve failed' });
+      }
+    }
   });
 
   router.post('/api/m1nd/document/bindings', async (req, res) => {
     const { path: docPath, node_id, top_k } = req.body;
-    const result = await getM1ndBridge().documentBindings(docPath, node_id, top_k || 10);
-    res.json(result || { error: 'm1nd offline' });
+    try {
+      const guardedPath = docPath ? await guardLocalPath(docPath, { kind: 'document' }) : null;
+      const result = await getM1ndBridge().documentBindings(guardedPath?.realPath, node_id, top_k || 10);
+      res.json(result || { error: 'm1nd offline' });
+    } catch (error) {
+      if (!sendPathGuardError(res, error)) {
+        res.status(500).json({ error: error instanceof Error ? error.message : 'm1nd document bindings failed' });
+      }
+    }
   });
 
   router.post('/api/m1nd/document/drift', async (req, res) => {
     const { path: docPath, node_id } = req.body;
-    const result = await getM1ndBridge().documentDrift(docPath, node_id);
-    res.json(result || { error: 'm1nd offline' });
+    try {
+      const guardedPath = docPath ? await guardLocalPath(docPath, { kind: 'document' }) : null;
+      const result = await getM1ndBridge().documentDrift(guardedPath?.realPath, node_id);
+      res.json(result || { error: 'm1nd offline' });
+    } catch (error) {
+      if (!sendPathGuardError(res, error)) {
+        res.status(500).json({ error: error instanceof Error ? error.message : 'm1nd document drift failed' });
+      }
+    }
   });
 
   return router;

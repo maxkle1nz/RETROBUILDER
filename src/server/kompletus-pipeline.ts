@@ -19,6 +19,14 @@ import { performDeepResearchWorkflow } from './ai-workflows.js';
 import { chatCompletionWithFallback } from './provider-runtime.js';
 import type { ChatMessage } from './providers/index.js';
 import { expandContractsWithResearch, validateCrossNodeContracts, generateSystemArtifacts } from './l1ght-preflight.js';
+import {
+  buildSpecularCreatePayload,
+  buildSpecularDesignGate,
+} from './specular-create/specular-service.js';
+import type {
+  SpecularBuildDesignSummary,
+  SpecularCreatePayload,
+} from './specular-create/specular-types.js';
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -28,6 +36,7 @@ export type KompletusStage =
   | 'triage'
   | 'research'
   | 'specular'
+  | 'specular_create'
   | 'l1ght'
   | 'quality'
   | 'complete'
@@ -86,6 +95,12 @@ export interface KompletusResult {
   explanation: string;
   research: Record<string, { report: string; meta: Record<string, unknown> }>;
   specular: SpecularAuditResult;
+  specularCreate: {
+    designProfile: '21st';
+    artifacts: SpecularCreatePayload[];
+    gate: SpecularBuildDesignSummary;
+    warnings: string[];
+  };
   l1ght: {
     expandedContracts: number;
     crossNodeIssues: number;
@@ -482,6 +497,68 @@ export async function runKompletusPipeline(
       parityScore: specular.parityScore,
     });
 
+    // ── Stage 5.5: SPECULAR CREATE ───────────────────────────────────
+    stageStart = Date.now();
+    onProgress({
+      stage: 'specular_create',
+      status: 'running',
+      message: 'Generating live UIX previews from SSOT contracts...',
+    });
+
+    const userFacingNodeIds = new Set(
+      specular.nodeScreenMap
+        .filter((entry) => entry.hasUserSurface)
+        .map((entry) => entry.nodeId),
+    );
+
+    const specularArtifacts = graph.nodes
+      .filter((node) => userFacingNodeIds.has(node.id))
+      .map((node) => buildSpecularCreatePayload(node));
+
+    graph = {
+      ...graph,
+      nodes: graph.nodes.map((node) => {
+        const artifact = specularArtifacts.find((entry) => entry.nodeId === node.id);
+        if (!artifact) {
+          return node;
+        }
+        return {
+          ...node,
+          designProfile: artifact.designProfile,
+          referenceCandidates: artifact.referenceCandidates,
+          selectedReferenceIds: artifact.selectedReferenceIds,
+          selectedProductDnaPackIds: artifact.selectedProductDnaPackIds,
+          activeProductDnaContract: artifact.activeProductDnaContract,
+          variantCandidates: artifact.variantCandidates,
+          selectedVariantId: artifact.selectedVariantId,
+          previewArtifact: artifact.previewArtifact,
+          previewState: artifact.previewState,
+          designVerdict: artifact.designVerdict,
+        };
+      }),
+    };
+
+    const specularCreateGate = buildSpecularDesignGate(graph.nodes);
+    const specularCreateWarnings = specularCreateGate.designGateStatus === 'failed'
+      ? specularCreateGate.designFindings
+      : [];
+
+    onProgress({
+      stage: 'specular_create',
+      status: 'done',
+      message: `SPECULAR CREATE: ${specularArtifacts.length} previews generated, design gate ${specularCreateGate.designGateStatus} (${specularCreateGate.designScore}%)`,
+      data: {
+        previews: specularArtifacts.length,
+        designGateStatus: specularCreateGate.designGateStatus,
+        designScore: specularCreateGate.designScore,
+      },
+    });
+    trackStage('specular_create', stageStart, {
+      previews: specularArtifacts.length,
+      designGateStatus: specularCreateGate.designGateStatus,
+      designScore: specularCreateGate.designScore,
+    });
+
     // ── Stage 6: L1GHT PRE-FLIGHT ────────────────────────────────────
     stageStart = Date.now();
     onProgress({ stage: 'l1ght', status: 'running', message: 'Expanding contracts and validating structure...' });
@@ -564,6 +641,38 @@ export async function runKompletusPipeline(
       issues: gateResult.issues.length,
     });
 
+    const finalSpecularArtifacts = graph.nodes
+      .filter((node) => userFacingNodeIds.has(node.id))
+      .map((node) => buildSpecularCreatePayload(node));
+
+    graph = {
+      ...graph,
+      nodes: graph.nodes.map((node) => {
+        const artifact = finalSpecularArtifacts.find((entry) => entry.nodeId === node.id);
+        if (!artifact) {
+          return node;
+        }
+        return {
+          ...node,
+          designProfile: artifact.designProfile,
+          referenceCandidates: artifact.referenceCandidates,
+          selectedReferenceIds: artifact.selectedReferenceIds,
+          selectedProductDnaPackIds: artifact.selectedProductDnaPackIds,
+          activeProductDnaContract: artifact.activeProductDnaContract,
+          variantCandidates: artifact.variantCandidates,
+          selectedVariantId: artifact.selectedVariantId,
+          previewArtifact: artifact.previewArtifact,
+          previewState: artifact.previewState,
+          designVerdict: artifact.designVerdict,
+        };
+      }),
+    };
+
+    const finalSpecularCreateGate = buildSpecularDesignGate(graph.nodes);
+    const finalSpecularCreateWarnings = finalSpecularCreateGate.designGateStatus === 'failed'
+      ? finalSpecularCreateGate.designFindings
+      : [];
+
     // ── Complete ──────────────────────────────────────────────────────
     const totalTimeMs = Date.now() - startTime;
     const explanation = systemState.explanation || '';
@@ -582,6 +691,12 @@ export async function runKompletusPipeline(
       explanation,
       research,
       specular,
+      specularCreate: {
+        designProfile: '21st',
+        artifacts: finalSpecularArtifacts,
+        gate: finalSpecularCreateGate,
+        warnings: finalSpecularCreateWarnings,
+      },
       l1ght: {
         expandedContracts: expanded.expandedCount,
         crossNodeIssues: crossIssues.length,

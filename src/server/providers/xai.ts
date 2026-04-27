@@ -61,7 +61,7 @@ export function createXAIProvider(): AIProvider {
       return content;
     },
 
-    async listModels(): Promise<ModelInfo[]> {
+    async listModels(_config?: CompletionConfig): Promise<ModelInfo[]> {
       try {
         const response = await client.models.list();
         const models: ModelInfo[] = [];

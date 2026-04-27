@@ -406,36 +406,36 @@ export function breakCycles(
   let currentLinks = [...links];
   const removed: IntegrityLink[] = [];
 
-  for (let iteration = 0; iteration < 10; iteration++) {
+  while (removed.length < links.length) {
     const cycles = findCycles(nodes, currentLinks);
     if (cycles.length === 0) break;
 
-    for (const cycle of cycles) {
-      // Find the edge to remove: prefer edges where source has higher priority
-      const cycleSet = new Set(cycle);
-      let bestEdgeIdx = -1;
-      let bestScore = -Infinity;
+    // Remove one edge, then recompute SCCs. Dense graphs can need more than
+    // ten removals, so the hard bound is the original edge count.
+    const cycleSet = new Set(cycles[0]);
+    let bestEdgeIdx = -1;
+    let bestScore = -Infinity;
 
-      for (let i = 0; i < currentLinks.length; i++) {
-        const link = currentLinks[i];
-        if (cycleSet.has(link.source) && cycleSet.has(link.target)) {
-          const sourceNode = nodes.find((n) => n.id === link.source);
-          const targetNode = nodes.find((n) => n.id === link.target);
-          // Score: prefer removing back-edges (higher priority → lower priority)
-          const score = (sourceNode?.priority ?? 0) - (targetNode?.priority ?? 0);
-          if (score > bestScore) {
-            bestScore = score;
-            bestEdgeIdx = i;
-          }
+    for (let i = 0; i < currentLinks.length; i++) {
+      const link = currentLinks[i];
+      if (cycleSet.has(link.source) && cycleSet.has(link.target)) {
+        const sourceNode = nodes.find((n) => n.id === link.source);
+        const targetNode = nodes.find((n) => n.id === link.target);
+        // Score: prefer removing back-edges (higher priority -> lower priority).
+        const score = (sourceNode?.priority ?? 0) - (targetNode?.priority ?? 0);
+        if (score > bestScore) {
+          bestScore = score;
+          bestEdgeIdx = i;
         }
       }
-
-      if (bestEdgeIdx >= 0) {
-        removed.push(currentLinks[bestEdgeIdx]);
-        currentLinks.splice(bestEdgeIdx, 1);
-        break; // Re-check cycles after each removal
-      }
     }
+
+    if (bestEdgeIdx < 0) {
+      break;
+    }
+
+    removed.push(currentLinks[bestEdgeIdx]);
+    currentLinks.splice(bestEdgeIdx, 1);
   }
 
   return { links: currentLinks, removed };

@@ -5,6 +5,78 @@ import { chatCompletionWithFallback } from './provider-runtime.js';
 import { validateAIResponse, validateGraphIntegrity, AnalysisResultSchema, GraphDataSchema, SystemStateSchema } from './validation.js';
 import { buildResearchContext, performWebResearch } from './web-research.js';
 import { getM1ndBridge } from './m1nd-bridge.js';
+import { hardenGraphForDelivery, hasPositiveNumber } from './graph-composition.js';
+
+export { consolidatePresentationFrontendNodes, hardenGraphForDelivery } from './graph-composition.js';
+
+export class WorkflowInputError extends Error {
+  statusCode = 422;
+  code = 'NON_ACTIONABLE_PROMPT';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'WorkflowInputError';
+  }
+}
+
+export class WorkflowProviderRuntimeError extends Error {
+  statusCode: number;
+  code: string;
+
+  constructor(message: string, options: { statusCode?: number; code?: string } = {}) {
+    super(message);
+    this.name = 'WorkflowProviderRuntimeError';
+    this.statusCode = options.statusCode || 502;
+    this.code = options.code || 'PROVIDER_RUNTIME_UNAVAILABLE';
+  }
+}
+
+function assertActionableProjectPrompt(prompt: string) {
+  const normalized = prompt.trim();
+  const letterCount = (normalized.match(/\p{L}/gu) || []).length;
+  const hasFileContext = normalized.includes('file://');
+
+  if (!hasFileContext && letterCount < 3) {
+    throw new WorkflowInputError(
+      `I need a project description before I can generate the architecture graph. "${normalized || 'empty prompt'}" is not enough context. Tell me what you want to build, who it is for, and the main features.`,
+    );
+  }
+}
+
+export function classifyNonJsonAIResponse(content: string) {
+  const normalized = content.toLowerCase();
+  const fromBridgeFallback = normalized.includes('thebridge returned a resilient fallback summary');
+  const codexTimedOut = normalized.includes('codex exec request timed out');
+
+  if (fromBridgeFallback || codexTimedOut) {
+    return new WorkflowProviderRuntimeError(
+      'THE BRIDGE Codex runtime did not return structured JSON for graph generation. Codex execution timed out or fell back to a summary; try again with a smaller request or switch to a provider with native JSON support.',
+      {
+        statusCode: codexTimedOut ? 504 : 502,
+        code: codexTimedOut ? 'BRIDGE_CODEX_TIMEOUT' : 'BRIDGE_CODEX_FALLBACK',
+      },
+    );
+  }
+
+  return null;
+}
+
+function validateSystemStateFromAI(content: string, endpoint: string) {
+  const extracted = extractJSON(content);
+  if (!extracted.includes('{')) {
+    if (process.env.RETROBUILDER_DEBUG_AI_JSON === '1') {
+      console.warn(`[Validation] ${endpoint}: non-JSON AI response sample: ${content.slice(0, 1200)}`);
+    }
+    const providerRuntimeError = classifyNonJsonAIResponse(content);
+    if (providerRuntimeError) {
+      throw providerRuntimeError;
+    }
+    throw new WorkflowInputError(
+      `I could not generate an architecture graph because the request does not contain enough project scope. Tell me what you want to build, who it is for, and the main features.`,
+    );
+  }
+  return validateAIResponse(extracted, SystemStateSchema, endpoint);
+}
 
 // ─── Inline Blueprint Quality Auditor ────────────────────────────────────
 
@@ -143,6 +215,12 @@ Security modules MUST connect to ALL backend and external services they protect.
 Ensure the graph has a clear hierarchy and SSOT. Avoid circular dependencies.
 IMPORTANT: The graph must be buildable by an autonomous agent in priority order.
 
+Node granularity rule:
+- Nodes are deployable construction lanes: apps, services, databases, integrations, security/compliance layers, or durable domain capabilities.
+- Do NOT create separate frontend nodes for visual/page sections such as Hero Section, Pricing Section, Feature Cards Grid, How It Works, Problem/Solution Sections, Final CTA, Title Screen, Beat Lab, Career Map, Header, Footer, or Visual System.
+- Put requested screens, sections, interactions, art direction, and layout requirements inside the acceptance criteria and description of ONE cohesive frontend app node.
+- Use multiple frontend nodes only for truly separate products or staff/customer surfaces, such as Customer App plus Admin Console.
+
 CRITICAL: You must return ONLY valid JSON.`;
 
 // ─── KONSTRUKTOR Workflow with Self-Correction Loop ──────────────────────
@@ -153,6 +231,7 @@ export async function generateGraphStructureWorkflow(input: {
   currentManifesto?: string;
   model?: string;
 }) {
+  assertActionableProjectPrompt(input.prompt);
   const hydratedPrompt = await hydratePromptWithFiles(input.prompt);
 
   // ── Pass 1: Initial Generation ──────────────────────────────────────
@@ -166,7 +245,7 @@ export async function generateGraphStructureWorkflow(input: {
 
   console.log('[KONSTRUKTOR] Pass 1: Generating initial skeleton...');
   const pass1Result = await chatCompletionWithFallback(pass1Messages, { jsonMode: true, model: input.model }, 'generateGraphStructure');
-  let validated = validateAIResponse(extractJSON(pass1Result.content), SystemStateSchema, 'generateGraphStructure');
+  let validated = validateSystemStateFromAI(pass1Result.content, 'generateGraphStructure');
   let repairedGraph = validateGraphIntegrity(validated.graph, 'generateGraphStructure:pass1', { allowCycleBreaking: true });
 
   // ── Quality Audit (Pass 1) ───────────────────────────────────────────
@@ -206,6 +285,8 @@ RULES:
 - EVERY node MUST have data_contract (string, non-empty). NO EXCEPTIONS.
 - EVERY node MUST have acceptance_criteria (string array, at least 2 entries).
 - Security modules MUST connect to ALL backend and external services.
+- Merge accidental visual-section frontend nodes into a single cohesive frontend app node. Do NOT preserve or add separate modules for Hero Section, Pricing Section, Feature Cards Grid, How It Works, Problem/Solution Sections, Final CTA, Title Screen, Beat Lab, Career Map, Header, Footer, or Visual System.
+- Treat visual sections, screens, Framer Motion guidance, generated assets, and content blocks as implementation details inside the app node, not standalone graph nodes.
 - New modules you add must have ALL required fields fully populated.
 - Update the manifesto and architecture documents to reflect your additions.
 - Update the explanation to describe what you improved and what you added.
@@ -227,16 +308,17 @@ CRITICAL: You must return ONLY valid JSON.`,
 
 As the HARDENER, you must:
 1. [CRITIC] Fix every issue listed above (if any). Every node needs error_handling and data_contract — fill them ALL.
-2. [DREAMER] Add 2-4 modules that a production system would need but this draft is missing (observability, resilience, compliance, etc). Fully populate all fields for new modules.
-3. [WIRING] Ensure security covers all services. Ensure no orphan nodes. Ensure all links have descriptive labels.
-4. [EXPLANATION] Rewrite the explanation to summarize both the corrections and the enhancements you made.
+2. [COMPOSITION] Collapse any frontend nodes that are merely visual/page sections into one cohesive frontend app node. Screens and sections belong in that node's acceptance criteria, not in separate modules.
+3. [DREAMER] Add 2-4 modules that a production system would need but this draft is missing (observability, resilience, compliance, etc). Fully populate all fields for new modules.
+4. [WIRING] Ensure security covers all services. Ensure no orphan nodes. Ensure all links have descriptive labels.
+5. [EXPLANATION] Rewrite the explanation to summarize both the corrections and the enhancements you made.
 
 Return the COMPLETE hardened JSON.`,
     },
   ];
 
   const pass2Result = await chatCompletionWithFallback(pass2Messages, { jsonMode: true, model: input.model }, 'generateGraphStructure:harden');
-  validated = validateAIResponse(extractJSON(pass2Result.content), SystemStateSchema, 'generateGraphStructure:pass2');
+  validated = validateSystemStateFromAI(pass2Result.content, 'generateGraphStructure:pass2');
   repairedGraph = validateGraphIntegrity(validated.graph, 'generateGraphStructure:pass2', { allowCycleBreaking: true });
 
   // ── Final Audit + Programmatic Guarantee ────────────────────────────
@@ -245,33 +327,16 @@ Return the COMPLETE hardened JSON.`,
   console.log(`[KONSTRUKTOR] Pass 2 result: ${finalErrors.length} errors remaining (was ${pass1Errors.length}), ${repairedGraph.nodes.length} nodes`);
 
   // Programmatic safety net — guarantee zero missing fields even if LLM flakes
-  const hardenedNodes = repairedGraph.nodes.map(n => ({
-    ...n,
-    data_contract: n.data_contract?.trim() || `Input: ${n.label} request payload → Output: ${n.label} response with status`,
-    error_handling: n.error_handling && n.error_handling.length >= 2
-      ? n.error_handling
-      : [
-          ...(n.error_handling || []),
-          ...([
-            `If ${n.label} operation fails, log error with context and return structured error response`,
-            `On timeout or connection failure, retry up to 3 times with exponential backoff before failing gracefully`,
-          ].slice(0, 2 - (n.error_handling?.length || 0))),
-        ],
-    acceptance_criteria: n.acceptance_criteria && n.acceptance_criteria.length >= 2
-      ? n.acceptance_criteria
-      : [
-          ...(n.acceptance_criteria || []),
-          ...([
-            `${n.label} responds to health check endpoint with 200 OK`,
-            `${n.label} handles invalid input gracefully and returns 400 with descriptive error`,
-          ].slice(0, 2 - (n.acceptance_criteria?.length || 0))),
-        ],
-  }));
-
-  repairedGraph = { nodes: hardenedNodes, links: repairedGraph.links };
+  repairedGraph = hardenGraphForDelivery(repairedGraph);
+  const hardenedNodes = repairedGraph.nodes;
 
   // Final verification log
-  const postHardenGaps = hardenedNodes.filter(n => !n.data_contract?.trim() || !n.error_handling?.length);
+  const postHardenGaps = hardenedNodes.filter(n =>
+    !n.data_contract?.trim()
+    || !n.error_handling?.length
+    || !hasPositiveNumber((n as any).priority)
+    || !hasPositiveNumber((n as any).group)
+  );
   console.log(`[KONSTRUKTOR] ✓ Delivered: ${hardenedNodes.length} nodes, ${repairedGraph.links.length} links, ${postHardenGaps.length} gaps (guaranteed 0)`);
 
   return {

@@ -22,6 +22,8 @@ export interface CompletionConfig {
   maxTokens?: number;
   /** Temperature (0-2) */
   temperature?: number;
+  /** Optional auth profile for OAuth-backed bridge lanes */
+  authProfile?: string | null;
 }
 
 export interface ModelInfo {
@@ -40,9 +42,9 @@ export interface AIProvider {
   /** Run a chat completion and return the text response */
   chatCompletion(messages: ChatMessage[], config?: CompletionConfig): Promise<string>;
   /** List available models for this provider */
-  listModels(): Promise<ModelInfo[]>;
+  listModels(config?: CompletionConfig): Promise<ModelInfo[]>;
   /** Pre-warm a model connection (token exchange, HTTP keep-alive). Best-effort, non-blocking. */
-  warmModel?(model?: string): Promise<void>;
+  warmModel?(model?: string, config?: CompletionConfig): Promise<void>;
 }
 
 // ─── Provider Registry ───────────────────────────────────────────────
@@ -61,10 +63,10 @@ export const PROVIDER_FACTORIES: Record<string, () => AIProvider> = {
 
 /**
  * Create an AI provider instance based on name.
- * Defaults to env var AI_PROVIDER, then falls back to 'xai'.
+ * Defaults to env var AI_PROVIDER, then falls back to local bridge mode.
  */
 export function createProvider(name?: string): AIProvider {
-  const providerName = name || process.env.AI_PROVIDER || 'xai';
+  const providerName = name || process.env.AI_PROVIDER || 'bridge';
   const factory = PROVIDER_FACTORIES[providerName];
 
   if (!factory) {

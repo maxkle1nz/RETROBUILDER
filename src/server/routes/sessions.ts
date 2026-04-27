@@ -16,6 +16,7 @@ import {
   saveSession,
 } from '../session-store.js';
 import { chatCompletionWithFallback } from '../provider-runtime.js';
+import { guardLocalPath, isLocalPathAccessError } from '../local-path-guard.js';
 
 export function createSessionRouter() {
   const router = Router();
@@ -51,14 +52,18 @@ export function createSessionRouter() {
     }
 
     try {
+      const guardedPath = await guardLocalPath(codebasePath, { kind: 'codebase', requireDirectory: true });
       const result = await importCodebaseToSession(
-        codebasePath,
+        guardedPath.realPath,
         (messages, config) => chatCompletionWithFallback(messages, config || {}, 'importCodebaseToSession').then((out) => out.content),
         model,
       );
       res.status(201).json(result);
     } catch (e: any) {
       console.error('[sessions] Failed to import codebase:', e.message);
+      if (isLocalPathAccessError(e)) {
+        return res.status(e.statusCode).json({ error: e.message, code: e.code });
+      }
       res.status(500).json({ error: e.message || 'Failed to import codebase' });
     }
   });

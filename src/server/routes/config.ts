@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { loadAuthProfiles, loadAuthProfilesByProvider } from '../auth-profile-store.js';
 import { createProvider } from '../providers/index.js';
 import { readEnvConfigState, writeEnvConfig } from '../env-config.js';
 import {
@@ -48,19 +49,31 @@ function registerProviderOnboardingRoutes(router: Router) {
     res.json({ providers, active: getActiveProviderName() });
   });
 
+  router.get('/api/ai/auth-profiles', async (req, res) => {
+    const provider = typeof req.query.provider === 'string' ? req.query.provider : undefined;
+    const profiles = provider ? await loadAuthProfilesByProvider(provider) : await loadAuthProfiles();
+    res.json({ profiles });
+  });
+
   router.get('/api/ai/models', async (req, res) => {
     const targetProvider = req.query.provider as string | undefined;
+    const authProfile = typeof req.query.authProfile === 'string' ? req.query.authProfile : undefined;
 
     try {
-      let targetP = getActiveProvider();
-      if (targetProvider && targetProvider !== targetP.name) {
-        targetP = createProvider(targetProvider);
-      }
+      const targetP = targetProvider ? createProvider(targetProvider) : getActiveProvider();
 
-      const models = await targetP.listModels();
+      const models = await targetP.listModels(authProfile ? { authProfile } : undefined);
+      const defaultSuffix = targetP.defaultModel.includes('/')
+        ? targetP.defaultModel
+        : `/${targetP.defaultModel}`;
+      const namespacedDefault = models.find((model) => model.id.endsWith(defaultSuffix))?.id;
+      const resolvedDefaultModel = models.some((model) => model.id === targetP.defaultModel)
+        ? targetP.defaultModel
+        : namespacedDefault || models[0]?.id || targetP.defaultModel;
       res.json({
         provider: targetP.name,
-        defaultModel: targetP.defaultModel,
+        authProfile: authProfile || null,
+        defaultModel: resolvedDefaultModel,
         models,
       });
     } catch (e: any) {
