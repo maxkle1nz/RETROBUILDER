@@ -206,7 +206,6 @@ async function run() {
           activeProvider: "bridge",
           activeModel: null,
           activeAuthProfile: "github-copilot:github",
-          showSessionLauncher: false,
           showEnvConfigModal: true
         },
         version: 0
@@ -216,6 +215,40 @@ async function run() {
     })()`);
 
     let body = '';
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await delay(250);
+      body = await cdp.evaluate<string>('document.body ? document.body.innerText : ""') || '';
+      if (body.includes('RETROBUILDER SESSIONS')) break;
+      if (body.includes('Project Keys & Provider Config')) break;
+    }
+
+    if (body.includes('RETROBUILDER SESSIONS')) {
+      const createResult = await cdp.evaluate<string>(`(() => {
+        const button = [...document.querySelectorAll('button')]
+          .find((candidate) => candidate.textContent?.toUpperCase().includes('CREATE SESSION'));
+        if (!button) return 'missing-create-session-button';
+        button.click();
+        return 'clicked-create-session';
+      })()`);
+      expect(createResult === 'clicked-create-session', `Could not create a smoke session from launcher. Got: ${createResult}`);
+
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await delay(250);
+        body = await cdp.evaluate<string>('document.body ? document.body.innerText : ""') || '';
+        if (!body.includes('RETROBUILDER SESSIONS')) break;
+      }
+      expect(!body.includes('RETROBUILDER SESSIONS'), `Session launcher did not close after creating smoke session:\n${body.slice(0, 1600)}`);
+    }
+
+    const openModalResult = await cdp.evaluate<string>(`(() => {
+      const button = [...document.querySelectorAll('button')]
+        .find((candidate) => candidate.getAttribute('aria-label') === 'Open project keys and provider config');
+      if (!button) return 'missing-project-keys-button';
+      button.click();
+      return 'clicked-project-keys';
+    })()`);
+    expect(openModalResult === 'clicked-project-keys', `Could not open provider config modal. Got: ${openModalResult}`);
+
     for (let attempt = 0; attempt < 40; attempt += 1) {
       await delay(500);
       body = await cdp.evaluate<string>('document.body ? document.body.innerText : ""') || '';
