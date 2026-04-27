@@ -1,10 +1,10 @@
 # Demystifier Card UIX Spec
 
-> For Hermes: use this as the canonical card/UIX spec for the Demystifier node system now living on `main`.
+This document is the canonical card/UIX spec for the Demystifier node system on `main`.
 
 Goal: keep the m1ndmap node compact, highly legible, and side-by-side comparable while preserving the structural graph feel.
 
-Architecture: the major Demystifier shift is already implemented on `main`, but this document remains the design law for future polish. The graph remains a graph; the node primitive is a disciplined Demystifier card rather than a wide cyber panel. Layout constants, card anatomy, typography, and metadata summarization should continue to obey this spec.
+Architecture: the major Demystifier shift is already implemented on `main`, but this document remains the reference spec for future polish. The graph remains a graph; the node primitive is a disciplined Demystifier card rather than a wide cyber panel. Layout constants, card anatomy, typography, and metadata summarization should continue to follow this spec.
 
 Tech Stack: React 19, `@xyflow/react`, dagre layout, Tailwind CSS 4, Zustand state, lucide-react icons.
 
@@ -39,7 +39,7 @@ It means “a card that demystifies what a module is, how mature it is, and how 
 
 ---
 
-## 2. Current-State Audit Summary
+## 2. Current Implementation Summary
 
 Current files involved:
 - `src/components/CyberNode.tsx`
@@ -50,7 +50,7 @@ Current files involved:
 - `src/components/KompletusReport.tsx`
 - `src/lib/api.ts`
 
-Current state at code level:
+Current implementation:
 - `layout.ts` now uses a compact truthful footprint: `220x180`
 - dagre spacing is already tightened to `nodesep: 64`, `ranksep: 104`
 - `CyberNode` already renders the compact Demystifier-style face on `main`
@@ -58,10 +58,10 @@ Current state at code level:
 - node comparison is materially better than the earlier wide-panel state
 - rich fields in `NodeData` are summarized more coherently on-card and through the inspector/report surfaces
 
-Remaining visual gaps:
-- continue tightening large-graph density under real dogfood sessions
+Remaining visual work:
+- continue tightening large-graph density under real project sessions
 - keep the card/report/inspector language aligned so the module reads consistently across surfaces
-- SPECULAR showcase and OMX handoff now have focused browser-level truth-manifest proof; the remaining gap is wider parity coverage across graph cards, reports, inspector surfaces, knowledge-bank guidance, and final runnable handoff
+- SPECULAR showcase and OMX handoff now have focused browser-level manifest verification; the remaining gap is wider parity coverage across graph cards, reports, inspector surfaces, knowledge-bank guidance, and final runnable handoff
 
 Current node data available:
 - `label`
@@ -78,11 +78,11 @@ Current node data available:
 - `constructionNotes`
 
 Conclusion:
-The data model is rich enough and the main card compaction has landed. The remaining work is visual-truth hardening, not a fresh redesign from scratch.
+The data model is rich enough and the main card compaction has landed. The remaining work is visual verification hardening, not a fresh redesign from scratch.
 
 ---
 
-## 3. Demystifier Design Law
+## 3. Demystifier Design Principles
 
 Every Demystifier card must answer, in under 2 seconds:
 - what is this module?
@@ -190,11 +190,11 @@ This means `layout.ts` should stay near the current compact implementation:
 - nodeWidth: `220`
 - nodeHeight: `180`
 
-Current `main` implementation already matches this direction. Further tuning should happen only after real visual dogfood, not by drifting back toward oversized placeholders.
+Current `main` implementation already matches this direction. Further tuning should happen only after validation against real project sessions, not by drifting back toward oversized placeholders.
 
 ---
 
-## 6. Graph Layout Law
+## 6. Graph Layout Principles
 
 The graph should still feel architectural, but denser and more intelligible.
 
@@ -266,7 +266,7 @@ If a decorative element competes with a metric or title, decoration loses.
 
 ## 9. Data Mapping Rules
 
-The Demystifier card should summarize richer node data rather than exposing raw long-form fields.
+The Demystifier card should summarize richer node data rather than exposing long-form source fields.
 
 ### Type
 Source:
@@ -327,7 +327,7 @@ Derived from:
 - AC/EH count
 - maybe status
 
-This footer should be composed, not copied from raw fields.
+This footer should be composed, not copied directly from source fields.
 
 ---
 
@@ -351,7 +351,7 @@ Implementation strategy:
 3. Replace stacked footer bands with one metrics grid + semantic footer
 4. Introduce stable card footprint
 5. Re-tune dagre dimensions to match
-6. Only after card + spacing are right, tune glows, handles, edge intensity, and background noise
+6. Only after card + spacing are right, tune glows, handles, edge intensity, and background texture
 
 ---
 
@@ -438,7 +438,7 @@ Not part of the first Demystifier cut:
 
 ## 14. Recommended Initial Implementation Defaults
 
-These are suggested starting points, not immutable truth.
+These are suggested starting points, not fixed requirements.
 
 Card defaults:
 - width: ~`196px`
@@ -466,7 +466,7 @@ Visual defaults:
 Branch for this work:
 - `design`
 
-Naming law:
+Naming:
 - use `Demystifier` in docs/spec discussions
 - do not refer to the target primitive as “Super Trunfo” in the implementation-facing language
 
@@ -477,5 +477,5 @@ Naming law:
 Immediate next implementation cut:
 1. refactor `CyberNode.tsx` into the Demystifier anatomy
 2. re-tune `layout.ts` to match the new physical footprint
-3. run visual verification in M1ND mode
+3. run visual verification in the m1nd graph view
 4. then do a follow-up polish pass on graph edge/background competition

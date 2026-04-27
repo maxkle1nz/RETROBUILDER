@@ -9,10 +9,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
-- **Docs Truth Alignment** — README and docs now reflect the active runtime architecture on `main` instead of older mixed assumptions.
-- **OMX Runtime Truth** — the docs now treat `src/server/omx-runtime.ts` + `src/server/routes/omx.ts` as the active build lifecycle path.
-- **Specular Honesty** — docs now distinguish between the real KOMPLETUS Specular audit/report contract and the still-open convergence work around legacy builder-side SPECULAR loop expectations.
-- **m1nd Truth** — docs now describe the session-projected M1ND cockpit flow alongside the raw `/api/m1nd/*` bridge.
+- **Documentation Alignment** — README and docs now reflect the active runtime architecture on `main` instead of older mixed assumptions.
+- **OMX Runtime Docs** — the docs now identify `src/server/omx-runtime.ts` and `src/server/routes/omx.ts` as the active build lifecycle path.
+- **Specular Docs** — docs now distinguish the current KOMPLETUS Specular audit/report flow from legacy builder-side SPECULAR loop references that still need convergence.
+- **M1ND Docs** — docs now describe the session-projected M1ND cockpit flow alongside the direct `/api/m1nd/*` bridge.
 
 ## [0.6.1] — 2026-04-17
 
@@ -27,7 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - **OMX Wiring**: KompletusReport "Accept & Continue" now triggers full zero-click materialize flow: apply graph → `resetBuild()` → `initNodeStates()` → `startBuild()` → activate `builder` view.
 - **M1ND Graph Projection Fidelity**: Replaced `auto` full-directory ingestion (791 document nodes) with targeted `topology.md` ingestion (~15 architectural modules), ensuring accurate structural impact metrics.
-- Export to OMX functionality significantly refined, cleanly separating architectural signals from `researchContext` noise (blueprint exported payload reduced from ~148KB to ~15KB).
+- Export to OMX functionality significantly refined, separating architectural signals from large embedded `researchContext` payloads (blueprint exported payload reduced from ~148KB to ~15KB).
 
 ### Fixed
 - Fixed critical `M1ndBridge.gatherStructuralContext()` mapping error where nodes were queried by human label (`seeds[0]`) instead of canonical `node_id`, resolving false-positive "Node not found" impact/predict errors.

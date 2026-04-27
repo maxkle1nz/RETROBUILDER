@@ -1,6 +1,6 @@
 # Product DNA Packs
 
-Product DNA Packs are source-controlled guidance contracts for Retrobuilder. They are not loose inspiration snippets. Each pack captures a reusable product intelligence pattern, its donor sources, prompt directives, validators, receipt requirements, and provenance.
+Product DNA Packs are source-controlled guidance contracts for Retrobuilder. Each pack captures a reusable product intelligence pattern, its donor sources, prompt directives, validators, receipt requirements, and provenance.
 
 The runtime compiles selected packs into an `ActiveProductDnaContract` before generation. That compiled contract is the narrow artifact that should be injected into prompts, quality gates, build receipts, and future knowledge-bank retrieval.
 
@@ -31,10 +31,10 @@ Retrobuilder can select packs explicitly by ID or compile them from intent:
 3. Prefer explicit selected pack IDs when present.
 4. Compile prompt directives, required evidence, validators, and receipts into one active contract.
 
-This keeps RAG as retrieval only. The thing that constrains generation is the compiled contract.
+This keeps RAG in a retrieval role. The compiled contract is what constrains generation.
 
 ## Knowledge Bank Feed
 
 Product DNA packs are now also ingestible as verified Knowledge Bank source documents. The pack remains the policy artifact; the Knowledge Bank creates chunk-level evidence with `docId`, `chunkId`, `sha256` fingerprints, trust level, review status, source URLs, and retrieval receipts.
 
-The default v1 backend is filesystem-first under `.retrobuilder/knowledge-bank/` so retrieval can be inspected, diffed, and tested without adding a vector service. SQLite/FTS5 and embeddings should be later adapters after provenance and evals are stable.
+The default v1 backend is filesystem-first under `.retrobuilder/knowledge-bank/` so retrieval can be inspected, diffed, and tested without adding a vector service. SQLite/FTS5 and embeddings remain future adapters until provenance and evals are stable.

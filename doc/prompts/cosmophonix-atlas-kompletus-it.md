@@ -4,7 +4,7 @@
 
 Progetta da zero COSMOPHONIX ATLAS.
 
-COSMOPHONIX ATLAS deve essere il sistema operativo interno di una casa di produzione musicale italiana con team multidisciplinare e stakeholder esterni.
+COSMOPHONIX ATLAS deve fungere da sistema operativo gestionale per una casa di produzione musicale italiana con team multidisciplinare e stakeholder esterni.
 
 Contesto reale:
 La struttura operativa storica di Cosmophonix ruota già intorno a questi nuclei:
@@ -13,7 +13,7 @@ La struttura operativa storica di Cosmophonix ruota già intorno a questi nuclei
 - Appuntamenti
 - Depositi
 
-Il nuovo sistema deve evolvere questa logica in una piattaforma moderna architecture-first, con SSOT chiara, workflow operativi reali, audit trail, permessi per ruolo e readiness per handoff in OMX / BU1LDER.
+Il nuovo sistema deve evolvere questa logica in una piattaforma moderna architecture-first, con SSOT chiara, workflow operativi reali, audit trail, permessi per ruolo e struttura pronta per handoff in OMX / BU1LDER.
 
 Obiettivo:
 Costruire un sistema di gestione completo per una casa di produzione musicale con:
@@ -36,7 +36,7 @@ COSMOPHONIX ATLAS non è un semplice CRM.
 Tesi centrale:
 - ogni artista ha un workspace dedicato
 - ogni release / progetto ha un workspace dedicato
-- Kosmo è l’assistente interno di coordinamento
+- Kosmo è il coordinatore operativo del sistema
 - Kosmo NON fa lavoro creativo per gli artisti
 - Kosmo gestisce il contatto tra artista e Producer
 - Kosmo può proporre appuntamenti, ma deve prima confermare con il Producer
@@ -139,7 +139,7 @@ Moduli obbligatori:
 - Universal: via email
 - altri canali: portale ADA, portale The Orchard
 - Luca Bottoli decide il portale finale
-- registrare decisione, data, stato invio, outcome e log operativo
+- registrare decisione, data, stato invio, esito e registro operativo
 
 12. Stakeholder esterni
 - major
@@ -202,7 +202,7 @@ Requisiti architetturali:
 - error handling
 - audit trail
 - permessi per ruolo
-- superfici user-facing chiaramente identificate
+- superfici utente chiaramente identificate
 - workflow reali, non solo CRUD
 
 Requisiti di design:
@@ -213,7 +213,7 @@ Requisiti di design:
 - poca confusione visiva
 - CTA chiari
 - dashboard orientate all’operatività
-- il frontend deve riflettere la truth del backend e la state machine reale
+- il frontend deve riflettere la fonte di verità del backend e la state machine reale
 
 Output richiesto:
 1. blueprint completo del sistema
@@ -221,10 +221,10 @@ Output richiesto:
 3. ruoli e permessi
 4. entità dati principali e relazioni
 5. workflow end-to-end
-6. superfici user-facing
+6. superfici utente
 7. acceptance criteria dei moduli principali
 8. error handling
-9. readiness per handoff in OMX / BU1LDER
+9. struttura pronta per handoff in OMX / BU1LDER
 
 ## Versione corta
 
@@ -251,7 +251,7 @@ Regole chiave:
 - Universal via email, ADA/The Orchard via portale, decisione finale di Luca Bottoli
 - architecture-first, SSOT, contratti dati, acceptance criteria, error handling, audit trail, ruoli/permessi
 - design premium/editoriale-tech ispirato a 21st.dev
-- frontend allineato alla state machine e alla truth del backend
+- frontend allineato alla state machine e alla fonte di verità del backend
 
 Output:
 - blueprint completo
@@ -259,5 +259,5 @@ Output:
 - ruoli e permessi
 - entità dati e relazioni
 - workflow end-to-end
-- user-facing surfaces
-- readiness per OMX / BU1LDER
+- superfici utente
+- struttura pronta per OMX / BU1LDER

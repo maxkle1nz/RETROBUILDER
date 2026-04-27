@@ -5,13 +5,13 @@ State: ◉ operational
 Color: #b026ff
 Glyph: 🔬
 Completeness: 92%
-Proof: empirical
+Verification: empirical
 Depends on:
   - src/server/web-research.ts
   - src/server/ai-workflows.ts
   - src/server/m1nd-bridge.ts
 Next:
-  - browser-level proof of grounding visibility
+  - browser-level verification of grounding visibility
   - research caching / replay
 ---
 
@@ -52,7 +52,7 @@ When m1nd is online, `performDeepResearchWorkflow(...)` enriches research output
 - `documentBindings(...)`
 - `documentDrift(...)`
 
-That lets the research report talk not only about external knowledge, but also about where the concept is likely bound into the code/document graph.
+That lets the research report describe both external knowledge and where the concept is likely bound into the code/document graph.
 
 [⟁ depends_on: src/server/m1nd-bridge.ts]
 
@@ -82,21 +82,21 @@ That lets the research report talk not only about external knowledge, but also a
 }
 ```
 
-## Operational Truth
+## Verified Behavior
 
-What is true today:
+Verified in the current implementation:
 - grounding is available as a first-class UX action in multiple surfaces
-- research is not just a detached note; it is written back into `researchContext`
+- research is written back into `researchContext` rather than remaining detached
 - the research pipeline is structurally enriched when m1nd is available
 - KOMPLETUS reuses the same general research substrate at larger pipeline scale
 
 ## Risk Surface
 
-[AMBER warning: visual-grounding-proof-gap]
-We still need a browser-level proof that grounding results are surfaced coherently across the full m1ndmap -> report -> build journey.
+[AMBER warning: visual-grounding-verification-gap]
+Current evidence does not yet include browser-level verification that grounding results surface coherently across the full `m1ndmap -> report -> build` journey.
 
 [AMBER warning: external-rate-limits]
 GitHub and scholar-style sources can still rate-limit under load.
 
 [GREEN note: graceful-partial-results]
-The system accepts partial research completion rather than collapsing on one provider failure.
+The pipeline accepts partial research completion instead of failing the entire run on one provider error.

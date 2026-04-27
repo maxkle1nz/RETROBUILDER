@@ -5,22 +5,22 @@ State: ◉ operational
 Color: #00ffcc
 Glyph: ⚡
 Completeness: 88%
-Proof: structural
+Verification: structural
 Depends on:
   - src/components/ChatFooter.tsx
   - src/server/routes/ai.ts
   - src/server/ai-workflows.ts
   - src/server/m1nd-bridge.ts
 Next:
-  - full-journey visual dogfood
-  - tighter proposal-to-proof ergonomics
+  - end-to-end visual verification
+  - tighter proposal verification ergonomics
 ---
 
 ## Overview
 
 [⌂ entity: Kreator] is the prompt-driven blueprint authoring subsystem inside RETROBUILDER.
 
-It currently operates in two practical authoring modes:
+It currently operates in two supported authoring modes:
 1. **KONSTRUKTOR** — generate the initial blueprint skeleton
 2. **KREATOR** — propose and apply graph modifications against an existing blueprint
 
@@ -41,7 +41,7 @@ It currently operates in two practical authoring modes:
 3. User explicitly reviews the proposal
 4. `applyProposalWorkflow(...)` mutates the graph when accepted
 
-This is still a human-approved proposal pipeline, not a hidden multi-step autopilot loop.
+This remains a user-approved proposal pipeline; it does not apply multi-step changes without explicit review.
 
 ## Structural Awareness (m1nd Integration)
 
@@ -56,7 +56,7 @@ Current injected context can include:
 - risk assessment
 - layer violations
 
-This makes KREATOR structurally aware instead of only prompt-reactive.
+This makes KREATOR structurally aware instead of relying on prompt text alone.
 
 [⟁ depends_on: src/server/m1nd-bridge.ts]
 [⟁ binds_to: src/server/ai-workflows.ts::generateProposalWorkflow]
@@ -88,21 +88,21 @@ For full autonomous handoff into OMX, the current preferred flow is:
 
 ## Risk Surface
 
-[AMBER warning: proposal-loop-not-proof-loop]
+[AMBER warning: proposal-loop-not-verification-loop]
 KREATOR proposals are structurally grounded, but the user still decides whether to apply them.
 
 [AMBER warning: visual-specular-gap]
-SPECULAR showcase and OMX handoff truth are browser-proved for the focused journey. The remaining visual risk is parity across every card/report/inspector/knowledge-bank surface, not the absence of first handoff proof.
+SPECULAR showcase and OMX handoff are browser-verified for the primary journey. The remaining visual risk is parity across card, report, inspector, and knowledge-bank surfaces, not the absence of initial handoff verification.
 
 [GREEN note: graceful-degradation]
 If m1nd is offline, proposal generation still works; it simply loses structural grounding.
 
-## Binding Truth
+## Binding Contract
 
-Current canonical bindings:
+Canonical bindings:
 - `src/components/ChatFooter.tsx`
 - `src/server/routes/ai.ts`
 - `src/server/ai-workflows.ts`
 - `src/server/m1nd-bridge.ts`
 
-Legacy `server.ts:*` references are no longer the best source of truth because the backend is now route-modular.
+Legacy `server.ts:*` references are no longer the best source of record because the backend is now route-modular.

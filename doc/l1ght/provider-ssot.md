@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`RETROBUILDER` treats provider routing as a system truth, not a UI hint.
+`RETROBUILDER` treats provider routing as a system contract, not a UI hint.
 
 The selected provider must determine:
 - which runtime is used
@@ -10,7 +10,7 @@ The selected provider must determine:
 - which model inventory is shown
 - which transport path is used for completions
 
-## Current truth
+## Current Contract
 
 ### 1. Selection
 
@@ -43,7 +43,7 @@ Runtime diagnostics exposed to the app:
 - `authProfile`
 - `authProfileProvider`
 
-### 3. Auth profile truth
+### 3. Auth profile contract
 
 Bridge auth profiles are discovered from local OpenClaw auth stores.
 
@@ -67,13 +67,13 @@ The selected auth profile changes:
 
 Uses the OpenAI-compatible THE BRIDGE runtime when available, with standalone donor `/responses` retained as fallback.
 
-Server-triggered local Codex JSON fallback is disabled by default. It only runs when `RETROBUILDER_ENABLE_LOCAL_CODEX_FALLBACK=1` is set in a trusted local environment, and the fallback no longer uses the dangerous sandbox-bypass CLI flag.
+Server-triggered local Codex JSON fallback is disabled by default. It only runs when `RETROBUILDER_ENABLE_LOCAL_CODEX_FALLBACK=1` is set in a trusted local environment, and the fallback no longer depends on the sandbox-bypass CLI flag.
 
 Verified working:
 - local Codex auth without OpenClaw profile
 - model: `gpt-5.5`
 
-Expected proof response:
+Expected verification response:
 - `bridge-local-ok`
 
 #### `github-copilot`
@@ -97,7 +97,7 @@ Verified working:
 - profile: `github-copilot:github`
 - model: `github-copilot/gpt-5.4`
 
-Expected proof response:
+Expected verification response:
 - `copilot-ok`
 
 ## Default-model rule
@@ -111,7 +111,7 @@ The `/api/ai/models` route must return a `defaultModel` that actually exists in 
 
 ## Current verified state
 
-Fresh verified runtime outcomes:
+Verified runtime outcomes:
 - `bridge` companion auto-start/reuse is contract- and smoke-tested
 - `/api/ai` provider/model/warmup routes are protected by the local API guard when `RETROBUILDER_LOCAL_API_TOKEN` is configured; non-loopback Retrobuilder binds require that token at startup
 - runtime health reports `defaultModel: gpt-5.5`
@@ -119,17 +119,17 @@ Fresh verified runtime outcomes:
 - `/api/ai/models` resolves the Codex default to `openai-codex/gpt-5.5`
 - local Codex live completion through THE BRIDGE is verified by `npm run verify:providers:codex-live`
 
-Fresh profile-backed live completion outcomes require local OpenClaw profiles:
+Profile-backed live completion outcomes require local OpenClaw profiles:
 - `bridge` + `openai-codex:default` -> `ready` -> `codex-ok`
 - `bridge` + `github-copilot:github` -> `ready` -> `copilot-ok`
 
-The default provider smoke reports missing local profiles as explicit skips so the local runtime can still be verified without sharing credentials. The local Codex live proof is:
+The default provider smoke reports missing local profiles as explicit skips so the local runtime can still be verified without sharing credentials. The local Codex live verification is:
 
 ```bash
 npm run verify:providers:codex-live
 ```
 
-The strict profile-backed live proof is:
+The strict profile-backed live verification is:
 
 ```bash
 BRIDGE_REQUIRE_LIVE_PROFILES=1 npm run verify:providers
@@ -161,9 +161,9 @@ Expected strict live outcome:
 - `openai-codex` returns `codex-ok`
 - `github-copilot` returns `copilot-ok`
 
-## Remaining gap
+## Remaining scope
 
-The provider SSOT is now runtime-real for:
+Provider SSOT is now exercised in runtime for:
 - xAI
 - Gemini
 - OpenAI direct
@@ -172,7 +172,7 @@ The provider SSOT is now runtime-real for:
 
 The remaining work is not provider wiring.
 
-The remaining work is:
+Remaining work:
 - broader E2E coverage
-- provider UI polish
+- provider UI refinement
 - final generated-system verification

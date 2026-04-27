@@ -6,19 +6,19 @@ Owner: OMX runtime
 
 ## Purpose
 
-OMX 2 upgrades the live build runtime from a serial node loop into an agent-native substrate with:
+OMX 2 moves the live build runtime from a serial node loop to an agent-native substrate with:
 - execution graph compilation
 - wave-aware scheduling
 - explicit file ownership
 - durable execution ledger
-- verify-before-complete truth
+- verify-before-complete enforcement
 - resumable builder operations grounded in runtime facts
 
-This document is the top-level mental model for the OMX 2 workstream.
+This document defines the runtime model for OMX 2.
 
 ## Core laws
 
-1. A task is never `complete` because Codex stopped writing.
+1. A task is never `complete` merely because a worker stopped writing.
 2. A task is only complete after:
    - worker execution finished
    - verify passed
@@ -50,14 +50,14 @@ Executes one task in an isolated overlay workspace.
 Runs the task verify command or structural fallback before merge.
 
 ### Merger
-Promotes only ownership-safe artifacts into workspace truth.
+Promotes only ownership-safe artifacts into the workspace source of record.
 
 ### Ledger
 Persists runtime events, operational actions, verify receipts, merge receipts, and resume context.
 
 ## Current implementation slice
 
-The active slice now in code covers:
+Current code coverage:
 - execution graph compilation
 - ownership manifest derivation
 - worker overlay preparation
@@ -69,7 +69,7 @@ The active slice now in code covers:
 - shared-artifact owner lanes for tasks that are allowed to promote root app/component artifacts
 - merge rejection surfacing in BU1LDER
 - task retry for failed merge/failed task states on the same build/workspace
-- owner arbitration minimum viable flow via \"take ownership & retry\" for rejected shared-owner paths
+- initial owner-arbitration flow via \"take ownership & retry\" for rejected shared-owner paths
 - controlled shared-file concurrency: tasks with disjoint module write sets may execute in the same wave even when their shared artifact lanes overlap
 - root composition generation for future builds: root package/workspace manifest plus workspace verify script
 - richer root composition generation for future builds: root package/workspace manifest, workspace verify script, workspace dev/build/start wrappers, `.env.example`, and root quickstart README
@@ -79,14 +79,14 @@ The active slice now in code covers:
   - `npm run verify` or `npm run test`
   - `npm run build`
   - `npm run smoke`
-  instead of accepting the first successful root command as sufficient proof
+  instead of accepting the first successful root command as sufficient verification
 - module packaging baseline now upgrades likely frontend modules with minimal `next dev/build/start` scripts, core runtime dependencies, `next.config.mjs`, and a minimal `/api/health` route when the generator omitted them
 - generated workspace readiness now has an aggregate repo gate:
   - `npm run verify:generated-workspace`
 
-## Out of scope for this slice
+## Deferred for later OMX 2 slices
 
-Still pending for later OMX 2 slices:
+Not yet covered in this slice:
 - simultaneous promotion of the same shared path by multiple tasks without arbitration
 - final system-wide verify command
 - automatic task splitting inside a single module

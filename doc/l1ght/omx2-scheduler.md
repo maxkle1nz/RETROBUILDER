@@ -76,4 +76,4 @@ This subsystem is considered healthy when:
 1. execution graph compiles deterministically for the same blueprint
 2. tasks have stable wave assignment
 3. ownership checks reject writes outside the lease
-4. resumable builds preserve task status truth across reentry
+4. resumable builds preserve task status across reentry

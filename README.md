@@ -98,7 +98,7 @@ npm run verify:providers
 npm run verify:specular
 ```
 
-Live provider proof is opt-in, keeping local checks budget-safe:
+Live provider verification is optional, keeping local checks budget-safe:
 
 ```bash
 RETROBUILDER_RUN_LIVE_E2E=1 RETROBUILDER_BROWSER_ARTIFACT_DIR=.retrobuilder/browser-artifacts npm run verify:live-kompletus-browser
@@ -144,7 +144,7 @@ Current implementation:
 - working shape: session-backed blueprints, m1nd analysis, KOMPLETUS, SPECULAR CREATE, and OMX build runtime
 - verification: lint, production build, generated-workspace contracts, security checks, provider checks, and browser smoke tests
 
-What is already real:
+Available today:
 - session launcher with backend persistence
 - ARCHITECT / M1ND / BU1LDER modes
 - Spotlight node search (`⌘K`)
@@ -248,7 +248,7 @@ The result opens `KompletusReport` with four views:
 ### 5. BU1LDER / OMX handoff
 From `KompletusReport`, `Accept & Continue to OMX`:
 - persists/hydrates the active session
-- starts a real OMX build
+- starts an OMX build
 - hydrates `useBuildStore`
 - enters `BU1LDER` mode after the runtime confirms the build has started
 
@@ -290,7 +290,7 @@ Specular checks how the planned system becomes user-facing product:
 
 `SPECULAR CREATE` is the UIX generation layer for user-facing nodes.
 
-It currently provides:
+It provides:
 - 21st-inspired local reference candidates
 - 3+ UI variants per user-facing node
 - TSX-backed preview artifacts
@@ -371,13 +371,13 @@ Repo hygiene guardrails keep local artifacts out of Git and are covered by `npm 
 
 ## Release Notes
 
-Current open work:
+Current focus areas:
 
-1. Run fresh live-provider evidence for the full path:
+1. Expand live-provider end-to-end verification across the full path:
    prompt -> m1ndmap -> grounding -> live KOMPLETUS -> OMX -> generated workspace -> reload/reentry.
-2. Finish cleanup around older `specular_iteration` / `omx-runner.ts` compatibility surfaces.
+2. Remove remaining `specular_iteration` / `omx-runner.ts` compatibility references from older surfaces.
 3. Keep browser smoke coverage stable across local Chromium and test-port differences.
-4. Frontend chunking still needs a performance pass.
+4. Continue frontend payload reduction work.
 
 ## Tech Stack
 
@@ -388,18 +388,18 @@ Current open work:
 | AI Providers | xAI, Gemini, OpenAI, THE BRIDGE |
 | Graph Engine | m1nd MCP bridge (stdio child process) |
 | Pipeline | KOMPLETUS + L1GHT pre-flight + Specular audit |
-| Build Runtime | real OMX lifecycle runtime with Codex transport checks |
+| Build Runtime | OMX lifecycle runtime with Codex transport checks |
 | Research | Perplexity, Serper, Semantic Scholar, CrossRef, GitHub, Jina |
 
 ## Join the Team
 
-Retrobuilder is a deep system: part visual architecture workbench, part agentic runtime, part design critic, part research system, and part build machine.
+Retrobuilder is a deep system: part visual architecture workbench, part orchestration runtime, part design review system, part research system, and part build pipeline.
 
-We are looking for programmers, vibe coders, inventors, systems thinkers, interface designers, product engineers, and even poets who can see structure inside chaos.
+We are looking for programmers, systems thinkers, interface designers, product engineers, researchers, and technical builders who can turn ambiguity into working structure.
 
-This project needs people who can move between imagination and execution. People who can prototype fast while keeping rigor. People who can make software feel alive and durable.
+This project needs people who can move between concept and execution, prototype quickly without dropping rigor, and ship software that is durable under real use.
 
-We value proof over pedigree. Send something real: a repo, demo, essay, prototype, strange experiment, interface, game, automation, agent workflow, or one hard problem that stayed with you.
+We value demonstrated work over pedigree. Send a repo, demo, prototype, interface, game, automation, agent workflow, essay, or one hard problem you have stayed with long enough to understand.
 
 ### Competencies We Need
 
@@ -408,7 +408,7 @@ We value proof over pedigree. Send something real: a repo, demo, essay, prototyp
 - Frontend and interaction design: React, graph canvases, motion, responsive workbench UX, product-grade flows, and distinctive design systems.
 - Generated software and build pipelines: stack selection, templates, generated workspaces, verification scripts, preview links, run commands, and final handoff hardening.
 - Data, backend, and security: APIs, auth, RBAC, databases, audit trails, local-first security boundaries, dependency hygiene, and operational reliability.
-- Creative direction and product writing: narrative, naming, onboarding, prompt systems, demo concepts, visual taste, and weird useful ideas.
+- Creative direction and product writing: narrative, naming, onboarding, prompt systems, demo concepts, visual taste, and unconventional but useful ideas.
 
 ### Apply
 
