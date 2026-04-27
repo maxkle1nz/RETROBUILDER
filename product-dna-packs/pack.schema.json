@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://retrobuilder.local/schemas/product-dna-pack.schema.json",
+  "title": "ProductDnaPack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "version",
+    "family",
+    "title",
+    "summary",
+    "status",
+    "appliesTo",
+    "retrieval",
+    "directives",
+    "validators",
+    "receipts",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "product-dna-pack@1" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-./]+$" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "family": {
+      "type": "string",
+      "enum": ["design", "domain", "stack", "game", "asset", "capability", "quality"]
+    },
+    "title": { "type": "string", "minLength": 3 },
+    "summary": { "type": "string", "minLength": 12 },
+    "status": {
+      "type": "string",
+      "enum": ["seed", "draft", "active", "deprecated"]
+    },
+    "appliesTo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeTypes", "intents"],
+      "properties": {
+        "nodeTypes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "screenTypes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "intents": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "keywords", "donorSources"],
+      "properties": {
+        "description": { "type": "string", "minLength": 12 },
+        "keywords": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "donorSources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "url", "kind"],
+            "properties": {
+              "label": { "type": "string" },
+              "url": { "type": "string" },
+              "kind": {
+                "type": "string",
+                "enum": ["docs", "repo", "product", "standard", "research", "internal"]
+              },
+              "license": { "type": "string" },
+              "notes": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "directives": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt", "requiredElements", "forbiddenPatterns", "allowedSubstitutions"],
+      "properties": {
+        "prompt": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "requiredElements": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "forbiddenPatterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowedSubstitutions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "stackHints": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "validators": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "description", "evidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "type": "string", "enum": ["info", "warn", "fail"] },
+          "description": { "type": "string" },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "receipts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "optional"],
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "optional": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capturedAt", "sourceType", "sourceUrls", "notes"],
+      "properties": {
+        "capturedAt": { "type": "string" },
+        "sourceType": {
+          "type": "string",
+          "enum": ["sidecar-research", "manual-curation", "internal-code", "imported-docs"]
+        },
+        "sourceUrls": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

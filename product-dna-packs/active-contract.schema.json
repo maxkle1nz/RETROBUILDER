@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://retrobuilder.local/schemas/active-product-dna-contract.schema.json",
+  "title": "ActiveProductDnaContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "generatedAt",
+    "node",
+    "packBindings",
+    "promptDirectives",
+    "requiredElements",
+    "forbiddenPatterns",
+    "allowedSubstitutions",
+    "stackHints",
+    "validators",
+    "receipts",
+    "provenance"
+  ],
+  "properties": {
+    "contractVersion": { "const": "active-product-dna-contract@1" },
+    "generatedAt": { "type": "string" },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "screenType": { "type": "string" },
+        "intent": { "type": "string" }
+      }
+    },
+    "packBindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "version", "family", "title"],
+        "properties": {
+          "id": { "type": "string" },
+          "version": { "type": "string" },
+          "family": { "type": "string" },
+          "title": { "type": "string" }
+        }
+      }
+    },
+    "promptDirectives": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiredElements": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "forbiddenPatterns": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "allowedSubstitutions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "stackHints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "validators": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["packId", "id", "severity", "description", "evidence"],
+        "properties": {
+          "packId": { "type": "string" },
+          "id": { "type": "string" },
+          "severity": { "type": "string" },
+          "description": { "type": "string" },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "receipts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "optional"],
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "optional": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["packId", "capturedAt", "sourceType", "sourceUrls"],
+        "properties": {
+          "packId": { "type": "string" },
+          "capturedAt": { "type": "string" },
+          "sourceType": { "type": "string" },
+          "sourceUrls": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "product-dna-pack@1",
+  "id": "asset/provenance-safe-media",
+  "version": "1.0.0",
+  "family": "asset",
+  "title": "Provenance Safe Media",
+  "summary": "A media generation and asset intake contract that records source, license, C2PA/status metadata, edit history, and human review state.",
+  "status": "seed",
+  "appliesTo": {
+    "nodeTypes": ["frontend", "game", "asset", "marketing", "runtime"],
+    "screenTypes": ["landing", "detail", "dashboard", "chat", "wizard"],
+    "intents": ["image", "asset", "logo", "icon", "video", "audio", "sprite", "music", "stock", "brand"]
+  },
+  "retrieval": {
+    "description": "Use when generated products need images, sprites, icons, video, audio, brand assets, or stock media.",
+    "keywords": ["asset", "image", "sprite", "icon", "audio", "voice", "video", "stock", "brand", "license", "c2pa", "provenance"],
+    "donorSources": [
+      {
+        "label": "C2PA",
+        "url": "https://c2pa.org/specifications/specifications/2.2/index.html",
+        "kind": "standard",
+        "notes": "Content provenance and tamper-evidence metadata standard."
+      },
+      {
+        "label": "Adobe Content Credentials",
+        "url": "https://contentcredentials.org/",
+        "kind": "standard",
+        "notes": "Provenance and disclosure surface for creative assets."
+      },
+      {
+        "label": "Lucide",
+        "url": "https://lucide.dev/",
+        "kind": "docs",
+        "notes": "Open icon system for safe product UI icons."
+      },
+      {
+        "label": "DiceBear",
+        "url": "https://www.dicebear.com/",
+        "kind": "docs",
+        "notes": "Procedural avatars/placeholders with deterministic seeds."
+      }
+    ]
+  },
+  "directives": {
+    "prompt": [
+      "Generate or select assets only with an explicit rights basis and stored provenance metadata.",
+      "Do not generate production logos, trademark-like marks, or celebrity/brand impersonation assets without human approval.",
+      "Every asset must declare its product role: mechanic, proof, illustration, avatar, icon, background, audio cue, or marketing media.",
+      "Prefer deterministic procedural placeholders when rights or production use are uncertain."
+    ],
+    "requiredElements": [
+      "Asset manifest with source type, provider, prompt/hash or source URL, license, and usage role",
+      "Dimensions, format, duration, and accessibility metadata where relevant",
+      "Human review status for brand, logo, face, voice, and commercial stock usage",
+      "C2PA or content-credential status when available"
+    ],
+    "forbiddenPatterns": [
+      "untracked generated media",
+      "production logo generated from prompt only",
+      "stock image without license metadata",
+      "audio or voice asset without disclosure policy",
+      "asset reused in product without declared role"
+    ],
+    "allowedSubstitutions": [
+      "Use Lucide/Tabler-style SVG icons when custom icon generation is risky.",
+      "Use procedural placeholders for avatars and sprites until licensed production assets exist.",
+      "Use brand-owned approved assets instead of generating brand marks."
+    ],
+    "stackHints": [
+      "Store generated assets in a deterministic assets directory with a manifest.",
+      "Keep remote stock/media URLs as provenance, not as the only durable asset copy.",
+      "For games, map every sprite/audio cue to game state or mechanic."
+    ]
+  },
+  "validators": [
+    {
+      "id": "asset_manifest_validator",
+      "severity": "fail",
+      "description": "Every nontrivial asset must be listed with source, rights basis, dimensions, and product role.",
+      "evidence": "asset-manifest.json and generated file list."
+    },
+    {
+      "id": "brand_safety_validator",
+      "severity": "fail",
+      "description": "Brand, logo, face, voice, and trademark-like assets require explicit approval or safe substitution.",
+      "evidence": "Manifest review status and source notes."
+    },
+    {
+      "id": "c2pa_status_validator",
+      "severity": "info",
+      "description": "C2PA/content credential status should be captured where provider support exists.",
+      "evidence": "Manifest credential fields and tool output."
+    }
+  ],
+  "receipts": {
+    "required": ["asset-manifest", "license-summary", "human-review-status"],
+    "optional": ["c2pa-manifest", "ocr-safety-check", "audio-loudness-check"]
+  },
+  "provenance": {
+    "capturedAt": "2026-04-26",
+    "sourceType": "sidecar-research",
+    "sourceUrls": [
+      "https://c2pa.org/specifications/specifications/2.2/index.html",
+      "https://contentcredentials.org/",
+      "https://lucide.dev/",
+      "https://www.dicebear.com/"
+    ],
+    "notes": "Seeded from generative asset and provenance sidecar research."
+  }
+}

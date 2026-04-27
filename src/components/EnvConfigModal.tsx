@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { fetchEnvConfig, fetchModels, saveEnvConfig, type EnvConfigState } from '../lib/api';
+import { fetchAuthProfiles, fetchEnvConfig, fetchModels, saveEnvConfig, type EnvConfigState } from '../lib/api';
 import { useGraphStore } from '../store/useGraphStore';
+import { useDialogFocus } from '../lib/useDialogFocus';
 import { AlertTriangle, KeyRound, Loader2, Save, ShieldCheck, X, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
+
+const ENV_DIALOG_TITLE_ID = 'env-config-dialog-title';
+const ENV_DIALOG_DESCRIPTION_ID = 'env-config-dialog-description';
 
 const SECRET_FIELDS = [
   'XAI_API_KEY',
@@ -35,13 +39,21 @@ export default function EnvConfigModal() {
     closeEnvConfigModal,
     setAvailableProviders,
     setAvailableModels,
+    setAvailableAuthProfiles,
+    availableAuthProfiles,
     setActiveProvider,
     setActiveModel,
+    setActiveAuthProfile,
   } = useGraphStore();
   const [state, setState] = useState<EnvConfigState | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const dialogRef = useDialogFocus<HTMLDivElement>({
+    active: showEnvConfigModal,
+    onClose: closeEnvConfigModal,
+    initialFocusSelector: '[data-dialog-autofocus]',
+  });
 
   useEffect(() => {
     if (!showEnvConfigModal) return;
@@ -49,24 +61,27 @@ export default function EnvConfigModal() {
   }, [showEnvConfigModal]);
 
   const activeProvider = useMemo(
-    () => form.AI_PROVIDER || state?.config.AI_PROVIDER || 'xai',
+    () => form.AI_PROVIDER || state?.config.AI_PROVIDER || 'bridge',
     [form.AI_PROVIDER, state?.config.AI_PROVIDER],
   );
 
   async function load() {
     setLoading(true);
     try {
-      const nextState = await fetchEnvConfig();
-      setState(nextState);
-      setForm({
-        AI_PROVIDER: nextState.config.AI_PROVIDER || 'xai',
+        const nextState = await fetchEnvConfig();
+        setState(nextState);
+        setForm({
+          AI_PROVIDER: nextState.config.AI_PROVIDER || 'bridge',
         XAI_MODEL: nextState.config.XAI_MODEL || '',
         GEMINI_MODEL: nextState.config.GEMINI_MODEL || '',
         OPENAI_MODEL: nextState.config.OPENAI_MODEL || '',
         THEBRIDGE_URL: nextState.config.THEBRIDGE_URL || '',
         THEBRIDGE_MODEL: nextState.config.THEBRIDGE_MODEL || '',
+        THEBRIDGE_AUTH_PROFILE: nextState.config.THEBRIDGE_AUTH_PROFILE || '',
       });
       setAvailableProviders(nextState.providers);
+      const authProfiles = await fetchAuthProfiles('bridge').catch(() => ({ profiles: [] }));
+      setAvailableAuthProfiles(authProfiles.profiles);
     } catch (error) {
       console.error(error);
       toast.error('Failed to load env config');
@@ -83,8 +98,12 @@ export default function EnvConfigModal() {
       setAvailableProviders(saved.providers);
       const selectedProvider = saved.config.AI_PROVIDER || form.AI_PROVIDER || activeProvider;
       setActiveProvider(selectedProvider);
+      setActiveAuthProfile(saved.config.THEBRIDGE_AUTH_PROFILE || form.THEBRIDGE_AUTH_PROFILE || null);
       try {
-        const models = await fetchModels(selectedProvider);
+        const selectedAuthProfile = selectedProvider === 'bridge'
+          ? (saved.config.THEBRIDGE_AUTH_PROFILE || form.THEBRIDGE_AUTH_PROFILE || null)
+          : null;
+        const models = await fetchModels(selectedProvider, selectedAuthProfile);
         setAvailableModels(models.models);
         if (models.defaultModel) {
           setActiveModel(models.defaultModel);
@@ -107,32 +126,38 @@ export default function EnvConfigModal() {
   if (!showEnvConfigModal) return null;
 
   return (
-    <div className="absolute inset-0 z-[130] bg-bg/85 backdrop-blur-md flex items-center justify-center p-6">
+    <div className="absolute inset-0 z-[130] bg-bg/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6">
       <motion.div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={ENV_DIALOG_TITLE_ID}
+        aria-describedby={ENV_DIALOG_DESCRIPTION_ID}
+        tabIndex={-1}
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-4xl bg-[#090b10] border border-accent/30 rounded-md overflow-hidden shadow-[0_0_40px_rgba(0,242,255,0.08)]"
+        className="flex max-h-[90vh] w-full max-w-4xl flex-col bg-[#090b10] border border-accent/30 rounded-md overflow-hidden shadow-[0_0_40px_rgba(0,242,255,0.08)]"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.25em] text-accent font-bold">Project Keys & Provider Config</div>
-            <div className="text-sm text-text-dim mt-1">
+            <div id={ENV_DIALOG_TITLE_ID} className="text-[10px] uppercase tracking-[0.25em] text-accent font-bold">Project Keys & Provider Config</div>
+            <div id={ENV_DIALOG_DESCRIPTION_ID} className="text-sm text-text-dim mt-1">
               Save local provider credentials into the project env file used by RETROBUILDER.
               {state?.targetFile ? ` Target: ${state.targetFile}` : ''}
             </div>
           </div>
-          <button onClick={closeEnvConfigModal} className="text-text-dim hover:text-white transition-colors">
+          <button onClick={closeEnvConfigModal} className="text-text-dim hover:text-white transition-colors" aria-label="Close project keys modal">
             <X size={18} />
           </button>
         </div>
 
         {loading ? (
-          <div className="p-10 flex items-center justify-center gap-3 text-text-dim">
+          <div className="p-10 flex items-center justify-center gap-3 text-text-dim" role="status" aria-live="polite">
             <Loader2 size={16} className="animate-spin" />
             Loading env configuration...
           </div>
         ) : (
-          <div className="p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar">
             {state?.onboardingRequired && (
               <div className="bg-[#ffcb6b]/10 border border-[#ffcb6b]/30 rounded p-4 flex items-start gap-3">
                 <AlertTriangle size={18} className="text-[#ffcb6b] mt-0.5" />
@@ -164,6 +189,20 @@ export default function EnvConfigModal() {
                     <div className="text-[10px] text-text-dim font-mono">
                       {provider.defaultModel || 'no default model'}
                     </div>
+                    {provider.runtime && (
+                      <div className="text-[10px] text-text-dim mt-2 font-mono space-y-1">
+                        {provider.runtime.baseUrl ? <div>url: {provider.runtime.baseUrl}</div> : null}
+                          {provider.runtime.command ? <div>cmd: {provider.runtime.command}</div> : null}
+                          {typeof provider.runtime.installed === 'boolean' ? <div>installed: {String(provider.runtime.installed)}</div> : null}
+                          {typeof provider.runtime.autoStart === 'boolean' ? <div>autoStart: {String(provider.runtime.autoStart)}</div> : null}
+                          {typeof provider.runtime.autoStarted === 'boolean' ? <div>autoStarted: {String(provider.runtime.autoStarted)}</div> : null}
+                          {typeof provider.runtime.healthy === 'boolean' ? <div>healthy: {String(provider.runtime.healthy)}</div> : null}
+                        {provider.runtime.protocol ? <div>protocol: {provider.runtime.protocol}</div> : null}
+                        {provider.runtime.source ? <div>source: {provider.runtime.source}</div> : null}
+                        {provider.runtime.authProfile ? <div>authProfile: {provider.runtime.authProfile}</div> : null}
+                        {provider.runtime.authProfileProvider ? <div>authProvider: {provider.runtime.authProfileProvider}</div> : null}
+                      </div>
+                    )}
                     {provider.error && (
                       <div className="text-[10px] text-text-dim mt-2 break-words">{provider.error}</div>
                     )}
@@ -180,17 +219,35 @@ export default function EnvConfigModal() {
                 </div>
                 <label className="block">
                   <span className="text-[10px] uppercase tracking-widest text-text-dim">AI Provider</span>
-                  <select
-                    value={form.AI_PROVIDER || 'xai'}
+                    <select
+                      data-dialog-autofocus
+                      value={form.AI_PROVIDER || 'bridge'}
                     onChange={(e) => setForm((prev) => ({ ...prev, AI_PROVIDER: e.target.value }))}
                     className="mt-2 w-full bg-bg border border-border-subtle rounded px-3 py-2 text-sm text-text-main outline-none focus:border-accent"
                   >
-                    <option value="xai">xAI</option>
-                    <option value="gemini">Google Gemini</option>
-                    <option value="bridge">THE BRIDGE</option>
-                    <option value="openai">OpenAI</option>
+                      <option value="bridge">THE BRIDGE</option>
+                      <option value="xai">xAI</option>
+                      <option value="gemini">Google Gemini</option>
+                      <option value="openai">OpenAI</option>
                   </select>
                 </label>
+                {activeProvider === 'bridge' && state && (
+                  <label className="block">
+                    <span className="text-[10px] uppercase tracking-widest text-text-dim">Bridge Auth Profile</span>
+                    <select
+                      value={form.THEBRIDGE_AUTH_PROFILE || ''}
+                      onChange={(e) => setForm((prev) => ({ ...prev, THEBRIDGE_AUTH_PROFILE: e.target.value }))}
+                      className="mt-2 w-full bg-bg border border-border-subtle rounded px-3 py-2 text-sm text-text-main outline-none focus:border-accent"
+                    >
+                      <option value="">auto / none</option>
+                      {availableAuthProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.id} · {profile.provider} · {profile.type}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
 
                 {TEXT_FIELDS.map((key) => (
                   <label key={key} className="block">
@@ -241,6 +298,7 @@ export default function EnvConfigModal() {
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={closeEnvConfigModal}
+                aria-label="Cancel project env changes"
                 className="px-4 py-2 border border-border-subtle rounded text-[11px] uppercase tracking-widest text-text-dim hover:text-white hover:border-accent transition-colors"
               >
                 Cancel
@@ -248,6 +306,7 @@ export default function EnvConfigModal() {
               <button
                 onClick={handleSave}
                 disabled={saving}
+                aria-label="Save project env"
                 className="px-4 py-2 bg-accent text-bg rounded text-[11px] uppercase tracking-widest font-bold hover:bg-white transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}

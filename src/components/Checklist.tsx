@@ -237,7 +237,7 @@ export default function Checklist() {
               </div>
               <div>
                 <h3 className={`text-[13px] font-medium ${isOrgansDone ? 'text-text-main' : 'text-text-dim'}`}>3. OMX Autopilot</h3>
-                <p className="text-[11px] text-text-dim mt-1">Hand over to autonomous agents (Ralph/OMX) for final execution.</p>
+                <p className="text-[11px] text-text-dim mt-1">Hand over to OMX Builder and autonomous agents for final execution.</p>
                 {isOrgansDone && (
                   <button className="mt-3 w-full py-2 bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-2 hover:bg-accent/20 shadow-[0_0_12px_rgba(0,242,255,0.1)] cursor-pointer">
                     <Rocket size={14} /> LAUNCH FULL AUTONOMY

@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "product-dna-pack@1",
+  "id": "capability/safe-mcp-tooling",
+  "version": "1.0.0",
+  "family": "capability",
+  "title": "Safe MCP Tooling Capability",
+  "summary": "A capability-pack contract for MCP/tool integrations with manifest, setup, policy, approval defaults, validators, and trace receipts.",
+  "status": "seed",
+  "appliesTo": {
+    "nodeTypes": ["integration", "tool", "backend", "agent", "workflow"],
+    "screenTypes": ["dashboard", "chat", "wizard", "detail"],
+    "intents": ["mcp", "tool", "agent", "connector", "provider", "github", "stripe", "supabase", "figma", "browser"]
+  },
+  "retrieval": {
+    "description": "Use when the product needs external tool execution, MCP servers, agent connectors, provider integrations, or governed write-capable tools.",
+    "keywords": ["mcp", "tool", "connector", "agent", "approval", "scope", "oauth", "policy", "trace", "provider", "integration"],
+    "donorSources": [
+      {
+        "label": "MCP Registry",
+        "url": "https://modelcontextprotocol.io/registry/about",
+        "kind": "docs",
+        "notes": "Metadata-only discovery registry and versioning pattern."
+      },
+      {
+        "label": "OpenAI Agents SDK",
+        "url": "https://platform.openai.com/docs/guides/agents-sdk/",
+        "kind": "docs",
+        "notes": "Tool use, multi-agent state, traces, and sandboxed execution patterns."
+      },
+      {
+        "label": "OpenAI trace grading",
+        "url": "https://platform.openai.com/docs/guides/trace-grading",
+        "kind": "docs",
+        "notes": "Trace-based regression and eval pattern for agent decisions and tool calls."
+      },
+      {
+        "label": "GitHub MCP server",
+        "url": "https://github.com/github/github-mcp-server",
+        "kind": "repo",
+        "notes": "Official MCP server with configurable toolsets."
+      },
+      {
+        "label": "Stripe MCP",
+        "url": "https://docs.stripe.com/mcp",
+        "kind": "docs",
+        "notes": "Public-preview payment tooling with OAuth and confirmation guidance."
+      }
+    ]
+  },
+  "directives": {
+    "prompt": [
+      "Model external capabilities as versioned tool packs, not as free-form prompt instructions.",
+      "Separate discovery metadata from runnable artifacts and policy enforcement.",
+      "Read-only tools may be auto-approved after validation; mutating tools must default to explicit approval.",
+      "Every tool pack must state what data it can read, what it can write, auth requirements, production risk, and trace requirements."
+    ],
+    "requiredElements": [
+      "Machine-readable manifest with provider, version, transport, auth, scopes, and toolsets",
+      "Setup instructions and verification path",
+      "Policy for allowed actions, denied actions, escalation, and data handling",
+      "Tool-call simulation or trace eval for risky workflows",
+      "Prompt-injection and unsafe-write regression tests"
+    ],
+    "forbiddenPatterns": [
+      "write-capable provider tool without approval policy",
+      "private credentials embedded in pack files",
+      "registry metadata treated as executable authority",
+      "remote MCP used without trust or scope notes"
+    ],
+    "allowedSubstitutions": [
+      "Use read-only docs packs when execution authority is not required.",
+      "Use local mock adapters for generated workspaces while preserving real auth/scope shape.",
+      "Use internal/private registry metadata when public MCP registry cannot represent private servers."
+    ],
+    "stackHints": [
+      "Keep capability packs immutable by version and use a latest alias only as a pointer.",
+      "Store trace receipts beside session/runtime receipts, not inside authored pack files.",
+      "Split browser automation into read/navigation and write/submit toolsets."
+    ]
+  },
+  "validators": [
+    {
+      "id": "manifest_scope_validator",
+      "severity": "fail",
+      "description": "Every capability pack must declare transport, auth mode, scopes, and allowed toolsets.",
+      "evidence": "Capability manifest and setup verification output."
+    },
+    {
+      "id": "mutating_tool_approval_validator",
+      "severity": "fail",
+      "description": "Mutating tools must require approval unless a safe automation policy explicitly waives it.",
+      "evidence": "Policy file, tool metadata, and trace fixture."
+    },
+    {
+      "id": "trace_eval_validator",
+      "severity": "warn",
+      "description": "High-risk tool workflows should carry golden traces or trace-grading fixtures.",
+      "evidence": "Trace eval fixture and regression result."
+    }
+  ],
+  "receipts": {
+    "required": ["capability-manifest", "policy-summary", "setup-verify-log"],
+    "optional": ["tool-simulation-trace", "prompt-injection-test", "approval-flow-proof"]
+  },
+  "provenance": {
+    "capturedAt": "2026-04-26",
+    "sourceType": "sidecar-research",
+    "sourceUrls": [
+      "https://modelcontextprotocol.io/registry/about",
+      "https://platform.openai.com/docs/guides/agents-sdk/",
+      "https://platform.openai.com/docs/guides/trace-grading",
+      "https://github.com/github/github-mcp-server",
+      "https://docs.stripe.com/mcp"
+    ],
+    "notes": "Seeded from MCP and agent-tool ecosystem sidecar research."
+  }
+}

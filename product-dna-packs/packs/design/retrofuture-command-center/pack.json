@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "product-dna-pack@1",
+  "id": "design/retrofuture-command-center",
+  "version": "1.0.0",
+  "family": "design",
+  "title": "Retrofuture Command Center",
+  "summary": "A dense AI-native interface grammar with editorial hierarchy, visible context chips, trace surfaces, and restrained cyber instrumentation.",
+  "status": "seed",
+  "appliesTo": {
+    "nodeTypes": ["frontend", "ui", "app", "workspace", "builder"],
+    "screenTypes": ["dashboard", "chat", "wizard", "detail", "landing"],
+    "intents": ["ai builder", "command center", "dashboard", "chat", "workspace", "operations", "agent", "canvas"]
+  },
+  "retrieval": {
+    "description": "Use when the requested product needs an AI-native workspace, control room, builder shell, dense expert UI, or cyber/editorial visual identity.",
+    "keywords": ["ai", "builder", "agent", "command", "control", "chat", "canvas", "trace", "status", "dashboard", "workspace", "retrofuture", "cyber"],
+    "donorSources": [
+      {
+        "label": "Material 3 Expressive",
+        "url": "https://developer.android.com/design/ui/wear/guides/get-started/design-language",
+        "kind": "docs",
+        "notes": "Expressive tokens, motion, and emotional hierarchy as a system, not decoration."
+      },
+      {
+        "label": "Apple Human Interface Guidelines",
+        "url": "https://developer.apple.com/design/human-interface-guidelines/",
+        "kind": "docs",
+        "notes": "Dynamic materials and focus rules should clarify hierarchy."
+      },
+      {
+        "label": "Figma canvas for agents",
+        "url": "https://www.figma.com/blog/the-figma-canvas-is-now-open-to-agents/",
+        "kind": "research",
+        "notes": "AI work happens inside the canvas with visible context and design-system awareness."
+      },
+      {
+        "label": "Vercel AI Elements",
+        "url": "https://vercel.com/academy/ai-sdk/ai-elements",
+        "kind": "docs",
+        "notes": "Message parts, tool calls, reasoning displays, and streaming states as UI primitives."
+      },
+      {
+        "label": "WCAG 2.2",
+        "url": "https://www.w3.org/TR/WCAG22/",
+        "kind": "standard",
+        "notes": "Focus visibility, target size, dragging alternatives, and accessibility gates."
+      }
+    ]
+  },
+  "directives": {
+    "prompt": [
+      "Design the surface as a working command center, not a decorative dark dashboard.",
+      "Use a deliberate display/body/mono typography triad, tabular numerals for telemetry, and one dominant accent color.",
+      "Every AI surface must show context chips, streaming or trace state, and a clear continue/commit action.",
+      "Use retro/cyber elements only as information instrumentation: labels, scanlines, trace rails, status chips, and structured logs."
+    ],
+    "requiredElements": [
+      "Clear primary action in the main panel",
+      "Context chips or visible inputs behind any AI output",
+      "Trace or evidence drawer for agent/tool activity",
+      "Keyboard-visible focus states and non-color status indicators",
+      "Mobile fallback layout that preserves action order"
+    ],
+    "forbiddenPatterns": [
+      "generic dark glass dashboard",
+      "floating text without anchoring container",
+      "flat card pile",
+      "diagnostic copy as product UI",
+      "system font stack as the only typographic choice"
+    ],
+    "allowedSubstitutions": [
+      "If advanced motion is unavailable, preserve hierarchy with opacity, border, and tokenized spacing.",
+      "If canvas interactions are unavailable, provide a structured list fallback with the same actions.",
+      "If a display font cannot be installed, choose an existing non-system brand font already in the project."
+    ],
+    "stackHints": [
+      "React/Vite surfaces can use CSS variables, motion, and component-level state.",
+      "Server-rendered surfaces should preserve the shell, trace, and command rail with progressive enhancement.",
+      "Respect prefers-reduced-motion and provide static equivalents for large transitions."
+    ]
+  },
+  "validators": [
+    {
+      "id": "no_generic_visual_debt",
+      "severity": "fail",
+      "description": "Fail if the surface can be summarized as a generic dark/glass/card dashboard without a unique product signature.",
+      "evidence": "DOM text, screenshots, CSS class names, and visual verdict notes."
+    },
+    {
+      "id": "ai_trace_required",
+      "severity": "fail",
+      "description": "AI surfaces must expose context, trace/evidence, and a continue or commit path.",
+      "evidence": "Rendered controls, accessible labels, and trace panel screenshot."
+    },
+    {
+      "id": "reduced_motion_parity",
+      "severity": "warn",
+      "description": "Motion must not be required to understand state or complete the flow.",
+      "evidence": "prefers-reduced-motion screenshot or CSS inspection."
+    }
+  ],
+  "receipts": {
+    "required": ["desktop-screenshot", "mobile-screenshot", "keyboard-focus-proof", "visual-verdict"],
+    "optional": ["reduced-motion-screenshot", "trace-panel-screenshot"]
+  },
+  "provenance": {
+    "capturedAt": "2026-04-26",
+    "sourceType": "sidecar-research",
+    "sourceUrls": [
+      "https://developer.android.com/design/ui/wear/guides/get-started/design-language",
+      "https://developer.apple.com/design/human-interface-guidelines/",
+      "https://www.figma.com/blog/the-figma-canvas-is-now-open-to-agents/",
+      "https://vercel.com/academy/ai-sdk/ai-elements",
+      "https://www.w3.org/TR/WCAG22/"
+    ],
+    "notes": "Seeded from parallel 2026 design-trend research for Retrobuilder."
+  }
+}

@@ -3,15 +3,20 @@ import { Settings2, ChevronDown, Zap, Globe, Bot, Loader2, Check, AlertTriangle,
 import { toast } from 'sonner';
 import { useGraphStore } from '../store/useGraphStore';
 import { fetchProviders, fetchModels, switchProvider } from '../lib/api';
+import { localApiAuthHeaders } from '../lib/local-api-auth';
+
+interface ModelSelectorProps {
+  className?: string;
+}
 
 /**
- * ModelSelector — Settings panel for AI provider/model selection.
- * Sits next to the chat input as a floating config panel.
+ * ModelSelector — compact dock for AI provider/model selection.
  */
-export default function ModelSelector() {
+export default function ModelSelector({ className = '' }: ModelSelectorProps) {
   const {
     activeProvider,
     activeModel,
+    activeAuthProfile,
     availableProviders,
     availableModels,
     setActiveProvider,
@@ -34,7 +39,7 @@ export default function ModelSelector() {
     }
     if (isOpen) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [isOpen]);
+  }, [isOpen, activeAuthProfile]);
 
   // Fetch providers + models on first open
   useEffect(() => {
@@ -60,7 +65,8 @@ export default function ModelSelector() {
 
   async function loadModels(providerName?: string) {
     try {
-      const data = await fetchModels(providerName);
+      const authProfile = providerName === 'bridge' ? activeAuthProfile : null;
+      const data = await fetchModels(providerName, authProfile);
       setAvailableModels(data.models);
       
       // If no model selected, use provider default
@@ -101,8 +107,12 @@ export default function ModelSelector() {
     // Background warmup — pre-fetch auth token + establish connection
     fetch('/api/ai/warmup', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: modelId }),
+      headers: localApiAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        model: modelId,
+        provider: activeProvider,
+        authProfile: activeProvider === 'bridge' ? activeAuthProfile : null,
+      }),
     }).catch(() => {}); // Best-effort, non-blocking
   }
 
@@ -114,22 +124,25 @@ export default function ModelSelector() {
   const activeProviderInfo = availableProviders.find(p => p.name === activeProvider);
 
   return (
-    <div ref={panelRef} className="relative">
+    <div ref={panelRef} className={`relative min-w-0 ${className}`}>
       {/* Trigger button */}
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface/80 border border-border-subtle text-text-dim hover:text-accent hover:border-accent transition-all text-[9px] uppercase tracking-widest font-bold cursor-pointer rounded"
+        aria-label={`AI model settings. Current model: ${activeModel || 'auto'}`}
+        aria-expanded={isOpen}
+        className="flex max-w-full items-center gap-1.5 rounded-lg border border-border-subtle bg-black/45 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-widest text-text-dim transition-all hover:border-accent hover:bg-accent/10 hover:text-accent"
         title="AI Model Settings"
       >
         <Settings2 size={12} />
-        <span className="hidden sm:inline">{displayModel}</span>
+        <span className="hidden max-w-[190px] truncate sm:inline">{displayModel}</span>
         <ChevronDown size={10} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Floating Panel */}
+      {/* Anchored Panel */}
       {isOpen && (
         <div 
-          className="absolute bottom-full mb-2 right-0 w-[320px] bg-[#0a0b0f] border border-accent/30 rounded shadow-[0_0_30px_rgba(0,242,255,0.1)] z-[9999] overflow-hidden backdrop-blur-xl"
+          className="absolute bottom-full right-0 z-[9999] mb-2 w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-accent/30 bg-[#0a0b0f]/98 shadow-[0_20px_70px_rgba(0,0,0,0.55),0_0_30px_rgba(0,242,255,0.1)] backdrop-blur-xl"
         >
           {/* Header */}
           <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">

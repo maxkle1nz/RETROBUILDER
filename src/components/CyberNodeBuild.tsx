@@ -13,14 +13,20 @@ const STATUS_COLORS: Record<BuildNodeStatus, { border: string; bg: string; glow:
 
 const PHASE_LABELS = { scaffold: '01', implement: '02', test: '03', integrate: '04' };
 
+type BuildNodeData = {
+  label?: string;
+  type?: string;
+};
+
 export default function CyberNodeBuild({ data, selected, id }: NodeProps) {
   const nodeState = useBuildStore((s) => s.nodeStates[id]);
   const status = nodeState?.status ?? 'dormant';
   const colors = STATUS_COLORS[status];
   const pct = nodeState?.pct ?? 0;
 
-  const label = (data as any).label as string;
-  const type  = (data as any).type as string | undefined;
+  const nodeData = data as BuildNodeData;
+  const label = nodeData.label ?? id;
+  const type  = nodeData.type;
 
   return (
     <div

@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "product-dna-pack@1",
+  "id": "game/playable-web-game",
+  "version": "1.0.0",
+  "family": "game",
+  "title": "Playable Web Game Vertical Slice",
+  "summary": "A game generation contract that requires mechanics, state, progression, feedback, and production-shaped assets instead of a static themed page.",
+  "status": "seed",
+  "appliesTo": {
+    "nodeTypes": ["frontend", "game", "interactive", "runtime"],
+    "screenTypes": ["dashboard", "landing", "detail"],
+    "intents": ["game", "playable", "arcade", "story", "quest", "producer", "music", "interactive", "level"]
+  },
+  "retrieval": {
+    "description": "Use for browser games, interactive narrative, simulation loops, and playable prototypes.",
+    "keywords": ["game", "play", "loop", "mechanic", "score", "level", "sprite", "asset", "music", "audio", "input", "canvas", "phaser", "pixi"],
+    "donorSources": [
+      {
+        "label": "Phaser",
+        "url": "https://phaser.io/",
+        "kind": "docs",
+        "notes": "Default donor for real 2D browser game mechanics."
+      },
+      {
+        "label": "PixiJS",
+        "url": "https://pixijs.com/",
+        "kind": "docs",
+        "notes": "Useful for render-heavy 2D playables and UI-rich scenes."
+      },
+      {
+        "label": "PlayCanvas",
+        "url": "https://playcanvas.com/",
+        "kind": "docs",
+        "notes": "Browser-first 3D/editor workflow donor."
+      },
+      {
+        "label": "Godot web export",
+        "url": "https://docs.godotengine.org/",
+        "kind": "docs",
+        "notes": "Full-engine workflow when a Godot-shaped project is acceptable."
+      }
+    ]
+  },
+  "directives": {
+    "prompt": [
+      "Generate a playable loop first. A themed marketing page is not a game.",
+      "Include player input, evolving state, explicit objective, failure or tradeoff, score/progression, and feedback tied to actions.",
+      "Assets must serve the mechanics: sprites, backgrounds, audio cues, UI meters, and story panels should map to game states.",
+      "If a heavy engine is unavailable, implement a focused canvas or DOM-based vertical slice with the same mechanics."
+    ],
+    "requiredElements": [
+      "Input loop with keyboard, pointer, or touch controls",
+      "State model for score, resources, level/progression, and failure/retry",
+      "At least one mechanic that changes the game state every turn or tick",
+      "Audio or visual feedback for success, failure, and progression",
+      "A clear finish condition or next-level transition"
+    ],
+    "forbiddenPatterns": [
+      "static story page pretending to be a game",
+      "only buttons that change text",
+      "no loss condition",
+      "assets disconnected from gameplay",
+      "unbounded animation loop without cleanup"
+    ],
+    "allowedSubstitutions": [
+      "Use CSS/DOM sprites if canvas is unavailable.",
+      "Use generated SVG or procedural placeholders when bitmap assets are not ready, but keep asset slots named by purpose.",
+      "Use Web Audio oscillator cues when licensed audio assets are unavailable."
+    ],
+    "stackHints": [
+      "Use Phaser for 2D game loops by default.",
+      "Use PixiJS for render-first 2D scenes and custom UI.",
+      "Avoid SSR-first frameworks for the game runtime; keep the play loop client-side."
+    ]
+  },
+  "validators": [
+    {
+      "id": "input_loop_validator",
+      "severity": "fail",
+      "description": "The game must respond to player input and update state.",
+      "evidence": "Playwright flow, keyboard/pointer event trace, and state readout."
+    },
+    {
+      "id": "progression_validator",
+      "severity": "fail",
+      "description": "The game must include score, level, resource, or story progression.",
+      "evidence": "State snapshot before and after at least two actions."
+    },
+    {
+      "id": "asset_validator",
+      "severity": "warn",
+      "description": "Assets must map to mechanics, states, or story beats and carry provenance.",
+      "evidence": "Asset manifest with usage, dimensions, and source metadata."
+    }
+  ],
+  "receipts": {
+    "required": ["playwright-input-trace", "state-progression-log", "desktop-play-screenshot", "mobile-control-screenshot"],
+    "optional": ["asset-manifest", "audio-cue-proof", "reduced-motion-proof"]
+  },
+  "provenance": {
+    "capturedAt": "2026-04-26",
+    "sourceType": "sidecar-research",
+    "sourceUrls": [
+      "https://phaser.io/",
+      "https://pixijs.com/",
+      "https://playcanvas.com/",
+      "https://docs.godotengine.org/"
+    ],
+    "notes": "Seeded after the producer-game experiment exposed that Retrobuilder needs a real playable-game contract."
+  }
+}

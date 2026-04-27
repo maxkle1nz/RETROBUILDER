@@ -5,15 +5,14 @@ import { Loader2, Search, CheckCircle2, Activity, AlertTriangle } from 'lucide-r
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-import NodeInspector from './NodeInspector';
 
 /**
  * Sidebar — decomposed.
- * - Node selected → delegates to NodeInspector
- * - No node → shows Builder/Manifesto/Architecture tabs
+ * Shows Builder/Manifesto/Architecture context.
+ * Node editing lives in the global NodeInspector drawer.
  */
 export default function Sidebar() {
-  const { graphData, setGraphData, manifesto, architecture, isGenerating, selectedNode } = useGraphStore();
+  const { graphData, setGraphData, manifesto, architecture, isGenerating } = useGraphStore();
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'manifesto' | 'architecture'>('chat');
@@ -42,9 +41,6 @@ export default function Sidebar() {
   return (
     <div className="w-full h-full bg-surface border-l border-border-subtle flex flex-col text-text-main font-sans z-10 relative">
       <AnimatePresence mode="wait">
-        {selectedNode ? (
-          <NodeInspector />
-        ) : (
           <motion.div 
             key="chat"
             initial={{ opacity: 0, x: 20 }}
@@ -145,7 +141,6 @@ export default function Sidebar() {
               )}
             </div>
           </motion.div>
-        )}
       </AnimatePresence>
     </div>
   );

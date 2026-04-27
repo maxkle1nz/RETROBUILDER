@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "product-dna-pack@1",
+  "id": "quality/browser-product-quality",
+  "version": "1.0.0",
+  "family": "quality",
+  "title": "Browser Product Quality Receipts",
+  "summary": "A validator and receipt contract for proving generated products work in the browser with screenshots, traces, accessibility, mobile, performance, and build evidence.",
+  "status": "seed",
+  "appliesTo": {
+    "nodeTypes": ["frontend", "app", "game", "runtime", "workspace"],
+    "screenTypes": ["dashboard", "form", "list", "detail", "chat", "wizard", "landing"],
+    "intents": ["browser", "frontend", "quality", "verify", "smoke", "mobile", "accessibility", "performance", "playwright"]
+  },
+  "retrieval": {
+    "description": "Use for generated UI/runtime quality gates that must prove real browser behavior and not just compile success.",
+    "keywords": ["browser", "quality", "playwright", "axe", "lighthouse", "web vitals", "mobile", "screenshot", "trace", "receipt", "smoke"],
+    "donorSources": [
+      {
+        "label": "Playwright",
+        "url": "https://playwright.dev/docs/best-practices",
+        "kind": "docs",
+        "notes": "Primary browser validator runner and trace/screenshot engine."
+      },
+      {
+        "label": "axe-core Playwright",
+        "url": "https://playwright.dev/docs/accessibility-testing",
+        "kind": "docs",
+        "notes": "Automated accessibility violation detection."
+      },
+      {
+        "label": "Lighthouse CI",
+        "url": "https://github.com/GoogleChrome/lighthouse-ci/blob/main/docs/configuration.md",
+        "kind": "docs",
+        "notes": "Lab performance assertions and reports."
+      },
+      {
+        "label": "web-vitals",
+        "url": "https://github.com/GoogleChrome/web-vitals",
+        "kind": "repo",
+        "notes": "Real-user LCP, INP, and CLS receipts."
+      },
+      {
+        "label": "Chrome DevTools Protocol",
+        "url": "https://chromedevtools.github.io/devtools-protocol/",
+        "kind": "docs",
+        "notes": "Low-level deterministic browser instrumentation fallback."
+      }
+    ]
+  },
+  "directives": {
+    "prompt": [
+      "A frontend is not complete until a real browser receipt proves it loads, responds, and preserves layout on mobile.",
+      "Generated apps must store validator evidence: screenshots, traces, console/network logs, a11y output, and build/test logs.",
+      "Use Playwright-style flows for core journeys and CDP-style evidence for deterministic screenshots or low-level protocol checks.",
+      "Accessibility and reduced-motion checks are product quality gates, not polish."
+    ],
+    "requiredElements": [
+      "Browser smoke flow for the primary journey",
+      "Desktop and mobile screenshots",
+      "Console/runtime error check",
+      "Accessibility scan or documented manual fallback",
+      "Build/typecheck or generated-workspace verify log"
+    ],
+    "forbiddenPatterns": [
+      "claiming frontend completion without browser evidence",
+      "desktop-only screenshots for mobile-first products",
+      "ignoring console runtime errors",
+      "a11y treated as optional for public or customer UI"
+    ],
+    "allowedSubstitutions": [
+      "Use Chromium CDP directly when Playwright is not available in the environment.",
+      "Use manual browser screenshots only as a temporary fallback and mark the receipt as manual.",
+      "Use Lighthouse CI in ship-ready lanes; skip it for fast prototype lanes with an explicit note."
+    ],
+    "stackHints": [
+      "Store receipts under .retrobuilder/browser-artifacts or future pack-receipts.",
+      "Use role/text/test-id locators rather than brittle CSS selectors.",
+      "Record traces on failure or retry."
+    ]
+  },
+  "validators": [
+    {
+      "id": "browser_smoke_validator",
+      "severity": "fail",
+      "description": "The generated frontend must load and complete its primary action without runtime errors.",
+      "evidence": "Playwright/CDP flow log, screenshot, console log, and network log."
+    },
+    {
+      "id": "mobile_viewport_validator",
+      "severity": "fail",
+      "description": "Mobile viewports must not clip controls, overflow horizontally, or lose action order.",
+      "evidence": "Screenshots at 375, 390, or 430 px width plus trace notes."
+    },
+    {
+      "id": "accessibility_validator",
+      "severity": "warn",
+      "description": "Automated accessibility issues should be detected and either fixed or explicitly waived.",
+      "evidence": "axe JSON, affected nodes, and before/after screenshots."
+    },
+    {
+      "id": "performance_budget_validator",
+      "severity": "info",
+      "description": "Ship-ready lanes should include lab or field performance evidence.",
+      "evidence": "Lighthouse CI report or web-vitals summary."
+    }
+  ],
+  "receipts": {
+    "required": ["desktop-screenshot", "mobile-screenshot", "browser-smoke-log", "console-log", "build-or-verify-log"],
+    "optional": ["playwright-trace", "axe-results", "lighthouse-report", "web-vitals-summary", "network-log"]
+  },
+  "provenance": {
+    "capturedAt": "2026-04-26",
+    "sourceType": "sidecar-research",
+    "sourceUrls": [
+      "https://playwright.dev/docs/best-practices",
+      "https://playwright.dev/docs/accessibility-testing",
+      "https://github.com/GoogleChrome/lighthouse-ci/blob/main/docs/configuration.md",
+      "https://github.com/GoogleChrome/web-vitals",
+      "https://chromedevtools.github.io/devtools-protocol/"
+    ],
+    "notes": "Seeded from Product DNA validator research."
+  }
+}

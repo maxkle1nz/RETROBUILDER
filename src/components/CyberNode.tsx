@@ -41,7 +41,7 @@ export default function CyberNode({ data, selected }: CyberNodeData) {
   const setSelectedNode   = useGraphStore((s) => s.setSelectedNode);
   const openRightPanel    = useGraphStore((s) => s.openRightPanel);
   const updateNode        = useGraphStore((s) => s.updateNode);
-  const openInspector     = useGraphStore((s) => (s as any).openInspector as ((id: string) => void) | undefined);
+  const openInspector     = useGraphStore((s) => s.openInspector);
 
   const isHighlighted = highlightedNodes.has(data.id);
   const isBlastSource = highlightSource === data.id;

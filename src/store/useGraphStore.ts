@@ -7,6 +7,7 @@ import {
   LinkData,
   ProviderInfo,
   ModelInfo,
+  AuthProfileInfo,
   SessionSummary,
   SessionSource,
   CodebaseImportMeta,
@@ -40,8 +41,10 @@ interface GraphState {
   // AI Provider/Model Selection
   activeProvider: string;
   activeModel: string | null;
+  activeAuthProfile: string | null;
   availableProviders: ProviderInfo[];
   availableModels: ModelInfo[];
+  availableAuthProfiles: AuthProfileInfo[];
 
   // Blast radius highlighting — set of node IDs that are "illuminated"
   highlightedNodes: Set<string>;
@@ -84,8 +87,10 @@ interface GraphState {
   // Provider/Model actions
   setActiveProvider: (provider: string) => void;
   setActiveModel: (model: string | null) => void;
+  setActiveAuthProfile: (profileId: string | null) => void;
   setAvailableProviders: (providers: ProviderInfo[]) => void;
   setAvailableModels: (models: ModelInfo[]) => void;
+  setAvailableAuthProfiles: (profiles: AuthProfileInfo[]) => void;
   setAvailableSessions: (sessions: SessionSummary[]) => void;
   setSessionSaveState: (state: SessionSaveState) => void;
   setSessionName: (name: string) => void;
@@ -102,12 +107,31 @@ interface GraphState {
   setKompletusRunning: (running: boolean) => void;
   addKompletusProgress: (event: KompletusEvent) => void;
   clearKompletusProgress: () => void;
-  updateKompletusNode: (nodeId: string, updates: Partial<NodeData>) => void;
 
   // Node Inspector
   inspectorNodeId: string | null;
   openInspector: (nodeId: string) => void;
   closeInspector: () => void;
+}
+
+type GraphHistoryState = Pick<GraphState, 'graphData' | 'manifesto' | 'architecture' | 'projectContext'>;
+
+function selectGraphHistoryState(state: GraphState): GraphHistoryState {
+  return {
+    graphData: state.graphData,
+    manifesto: state.manifesto,
+    architecture: state.architecture,
+    projectContext: state.projectContext,
+  };
+}
+
+function graphHistoryEquals(a: GraphHistoryState, b: GraphHistoryState) {
+  return (
+    a.graphData === b.graphData &&
+    a.manifesto === b.manifesto &&
+    a.architecture === b.architecture &&
+    a.projectContext === b.projectContext
+  );
 }
 
 export const useGraphStore = create<GraphState>()(
@@ -137,8 +161,10 @@ export const useGraphStore = create<GraphState>()(
         selectedNodes: new Set<string>(),
         activeProvider: 'xai',
         activeModel: null,
+        activeAuthProfile: null,
         availableProviders: [],
         availableModels: [],
+        availableAuthProfiles: [],
         showKompletusReport: false,
         kompletusResult: null,
         kompletusProgress: [],
@@ -224,8 +250,10 @@ export const useGraphStore = create<GraphState>()(
         setSelectedNodes: (nodeIds) => set({ selectedNodes: new Set(nodeIds) }),
         setActiveProvider: (provider) => set({ activeProvider: provider }),
         setActiveModel: (model) => set({ activeModel: model }),
+        setActiveAuthProfile: (activeAuthProfile) => set({ activeAuthProfile }),
         setAvailableProviders: (providers) => set({ availableProviders: providers }),
         setAvailableModels: (models) => set({ availableModels: models }),
+        setAvailableAuthProfiles: (availableAuthProfiles) => set({ availableAuthProfiles }),
         setAvailableSessions: (sessions) => set({ availableSessions: sessions }),
         setSessionSaveState: (sessionSaveState) => set({ sessionSaveState }),
         setSessionName: (activeSessionName) => set((state) => ({
@@ -279,30 +307,13 @@ export const useGraphStore = create<GraphState>()(
           kompletusProgress: [...state.kompletusProgress, event],
         })),
         clearKompletusProgress: () => set({ kompletusProgress: [], kompletusResult: null }),
-        updateKompletusNode: (nodeId, updates) => set((state) => {
-          if (!state.kompletusResult) return state;
-          return {
-            kompletusResult: {
-              ...state.kompletusResult,
-              graph: {
-                ...state.kompletusResult.graph,
-                nodes: state.kompletusResult.graph.nodes.map(n =>
-                  n.id === nodeId ? { ...n, ...updates } : n,
-                ),
-              },
-            },
-          };
-        }),
         openInspector: (nodeId) => set({ inspectorNodeId: nodeId }),
         closeInspector: () => set({ inspectorNodeId: null }),
       }),
       {
-        partialize: (state) => ({
-          activeSessionId: state.activeSessionId,
-          activeSessionName: state.activeSessionName,
-          activeSessionSource: state.activeSessionSource,
-          importMeta: state.importMeta,
-        })
+        partialize: selectGraphHistoryState,
+        equality: graphHistoryEquals,
+        limit: 100,
       }
     ),
     {
@@ -312,6 +323,7 @@ export const useGraphStore = create<GraphState>()(
         appMode: state.appMode,
         activeProvider: state.activeProvider,
         activeModel: state.activeModel,
+        activeAuthProfile: state.activeAuthProfile,
         activeSessionId: state.activeSessionId,
         showSessionLauncher: state.showSessionLauncher,
         showEnvConfigModal: state.showEnvConfigModal,

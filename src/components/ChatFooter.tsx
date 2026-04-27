@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
-import { activateSessionDraft, generateGraphStructure, generateProposal, applyProposal, runKompletus } from '../lib/api';
+import { useBuildStore } from '../store/useBuildStore';
+import { activateSessionDraft, fetchOmxStatus, generateGraphStructure, generateProposal, applyProposal, recordOmxOperationalMessage, runKompletus, resumeOmxBuild } from '../lib/api';
 import { m1nd } from '../lib/m1nd';
 import { Send, Loader2, Terminal, Check, X, BrainCircuit, Download, Upload, Trash2, Zap, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
@@ -44,6 +45,10 @@ export default function ChatFooter() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
+  const seenResumeHintRef = useRef<string | null>(null);
+  const buildProgress = useBuildStore((s) => s.buildProgress);
+  const buildTotalNodes = useBuildStore((s) => s.totalNodes);
+  const buildCompletedNodes = useBuildStore((s) => s.completedNodes);
 
   const isM1ndMode = appMode === 'm1nd';
   const isBuilderMode = appMode === 'builder';
@@ -71,6 +76,35 @@ export default function ChatFooter() {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role, content, timestamp: Date.now() }]);
   };
 
+  const isBuilderResumePrompt = (text: string) => /(^|\b)(continue|continuar|continua|retoma|retomar|resume|riprendi|where you stopped|de onde você parou|de onde voce parou)(\b|$)/i.test(text.trim());
+
+  useEffect(() => {
+    if (!isBuilderMode || !activeSessionId) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const remote = await fetchOmxStatus(activeSessionId);
+        if (cancelled) return;
+        if (!remote.resumeAvailable || !remote.buildId) return;
+        if (seenResumeHintRef.current === remote.buildId) return;
+
+        seenResumeHintRef.current = remote.buildId;
+        setShowHistory(true);
+        addMessage(
+          'system',
+          `Resume available: build ${remote.buildId.slice(0, 8)} is ${remote.resumeReason || remote.status} at ${remote.completedNodes ?? 0}/${remote.totalNodes ?? 0} nodes. Type \"continue\" to resume from persisted workspace truth.`,
+        );
+      } catch {
+        // best-effort hint only
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isBuilderMode, activeSessionId]);
+
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
     if (!activeSessionId) {
@@ -82,6 +116,50 @@ export default function ChatFooter() {
     setPrompt('');
     addMessage('user', currentPrompt);
     setShowHistory(true);
+
+    if (isBuilderMode && isBuilderResumePrompt(currentPrompt)) {
+      setIsGenerating(true);
+      try {
+        await recordOmxOperationalMessage(activeSessionId, {
+          role: 'user',
+          action: 'resume',
+          message: currentPrompt,
+        });
+        const build = await resumeOmxBuild(activeSessionId, {
+          name: activeSessionName,
+          source: activeSessionSource,
+          graph: graphData,
+          manifesto,
+          architecture,
+          projectContext,
+          importMeta,
+        });
+        const { resetBuild, initNodeStates, startBuild, hydrateBuildLifecycle } = useBuildStore.getState();
+        resetBuild();
+        initNodeStates(graphData.nodes.map((node) => node.id));
+        startBuild(build.status);
+        hydrateBuildLifecycle(build);
+        addMessage('system', `Resuming OMX build ${build.buildId.slice(0, 8)} from persisted workspace truth.`);
+        await recordOmxOperationalMessage(activeSessionId, {
+          role: 'system',
+          action: 'resume',
+          message: `Resume accepted for build ${build.buildId.slice(0, 8)}.`,
+        });
+        toast.success(`Resumed OMX build ${build.buildId.slice(0, 8)}`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Failed to resume OMX build';
+        addMessage('system', `Resume failed: ${msg}`);
+        await recordOmxOperationalMessage(activeSessionId, {
+          role: 'system',
+          action: 'resume_failed',
+          message: msg,
+        }).catch(() => {});
+        toast.error('Failed to resume OMX build', { description: msg });
+      } finally {
+        setIsGenerating(false);
+      }
+      return;
+    }
 
     // ─── M1ND Mode: route through server-side m1nd bridge ───
     if (isM1ndMode) {
@@ -251,9 +329,14 @@ export default function ChatFooter() {
     input.click();
   };
 
-  const totalNodes = graphData.nodes.length;
-  const completedNodes = graphData.nodes.filter(n => n.status === 'completed').length;
-  const progress = totalNodes > 0 ? Math.round((completedNodes / totalNodes) * 100) : 0;
+  const graphTotalNodes = graphData.nodes.length;
+  const graphCompletedNodes = graphData.nodes.filter(n => n.status === 'completed').length;
+  const graphProgress = graphTotalNodes > 0 ? Math.round((graphCompletedNodes / graphTotalNodes) * 100) : 0;
+  const railUsesBuildLifecycle = isBuilderMode && buildTotalNodes > 0;
+  const railTotalNodes = railUsesBuildLifecycle ? buildTotalNodes : graphTotalNodes;
+  const railCompletedNodes = railUsesBuildLifecycle ? buildCompletedNodes : graphCompletedNodes;
+  const railProgress = railUsesBuildLifecycle ? buildProgress : graphProgress;
+  const showUtilityRail = graphTotalNodes > 0 || isBuilderMode || isGenerating || isKompletusRunning;
 
   return (
     <footer className="bg-surface border-t border-border-subtle shrink-0 z-20 relative">
@@ -325,107 +408,146 @@ export default function ChatFooter() {
         </div>
       )}
 
-      <div className="h-[100px] p-4 px-6 flex gap-5">
-        <div className="flex-1 relative flex flex-col">
-          <div className={`absolute -top-7 left-0 right-0 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest font-bold`}>
-            <div className={`flex items-center gap-2 ${isBuilderMode ? 'text-[#50fa7b]' : isM1ndMode ? 'text-[#b026ff]' : 'text-accent'}`}>
-              {isM1ndMode ? <BrainCircuit size={12} /> : <Terminal size={12} />}
-              <span>[ {mode} MODE ]</span>
-              {m1ndOnline && isM1ndMode && (
-                <span className="flex items-center gap-1 text-[#50fa7b] text-[8px]">
-                  <Zap size={8} /> GROUNDED
+      <div className="px-3 py-2 sm:px-6">
+        <div className={`grid gap-3 ${showUtilityRail ? 'xl:grid-cols-[minmax(0,1fr)_220px]' : ''}`}>
+          <div className={`min-w-0 overflow-hidden rounded-[18px] border bg-[#050608]/92 shadow-[0_16px_48px_rgba(0,0,0,0.28)] ${
+            isBuilderMode
+              ? 'border-[#50fa7b]/24'
+              : isM1ndMode
+                ? 'border-[#b026ff]/24'
+                : 'border-border-subtle'
+          }`}>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.025] px-3 py-1.5">
+              <div className={`flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest ${
+                isBuilderMode ? 'text-[#50fa7b]' : isM1ndMode ? 'text-[#b026ff]' : 'text-accent'
+              }`}>
+                <span className="inline-flex items-center gap-2 rounded-full border border-current/25 bg-current/10 px-2.5 py-1">
+                  {isM1ndMode ? <BrainCircuit size={12} /> : <Terminal size={12} />}
+                  {mode} mode
                 </span>
-              )}
-              {messages.length > 0 && (
-                <button 
-                  onClick={() => setShowHistory(!showHistory)} 
-                  className="text-text-dim hover:text-accent transition-colors ml-2 text-[9px]"
-                >
-                  {showHistory ? '▼ HIDE' : '▲ HISTORY'} ({messages.length})
-                </button>
-              )}
+                <span className="hidden min-w-0 truncate text-[9px] text-text-dim lg:inline">
+                  {isBuilderMode
+                    ? 'Resume or inspect generated workspace operations'
+                    : isM1ndMode
+                      ? 'Ask grounded questions over the project graph'
+                      : mode === 'KONSTRUKTOR'
+                        ? 'Describe a system and let RETROBUILDER shape the blueprint'
+                        : 'Ask for precise graph edits, refinements or architecture changes'}
+                </span>
+                {m1ndOnline && isM1ndMode && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#50fa7b]/25 bg-[#50fa7b]/10 px-2 py-1 text-[8px] text-[#50fa7b]">
+                    <Zap size={8} /> GROUNDED
+                  </span>
+                )}
+                {messages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="rounded-full border border-white/10 bg-black/25 px-2 py-1 text-[9px] text-text-dim transition-colors hover:border-accent/40 hover:text-accent"
+                  >
+                    {showHistory ? 'Hide history' : 'History'} · {messages.length}
+                  </button>
+                )}
+              </div>
+              <ModelSelector className="shrink-0" />
             </div>
-            <ModelSelector />
+
+            <div className="relative p-1.5">
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleGenerate();
+                  }
+                }}
+                placeholder={
+                  isM1ndMode
+                    ? "Query m1nd graph engine... (e.g. 'where is auth handled?')"
+                    : mode === 'KONSTRUKTOR'
+                      ? "Describe the system you want to build..."
+                      : "Ask to modify the graph topology or explain behavior..."
+                }
+                className={`h-[48px] w-full resize-none rounded-xl border bg-bg px-3 py-2.5 pr-20 font-mono text-[12px] text-text-main outline-none transition-all duration-300 custom-scrollbar sm:h-[50px] ${
+                  isBuilderMode
+                    ? 'border-[#50fa7b]/30 focus:border-[#50fa7b] focus:shadow-[0_0_12px_rgba(80,250,123,0.2)]'
+                    : isM1ndMode
+                      ? 'border-[#b026ff]/30 focus:border-[#b026ff] focus:shadow-[0_0_12px_rgba(176,38,255,0.2)]'
+                      : 'border-border-subtle focus:border-accent focus:shadow-[0_0_12px_rgba(0,242,255,0.15)]'
+                }`}
+              />
+              <div className="absolute bottom-3.5 right-3.5 flex items-center gap-2">
+                {mode === 'KONSTRUKTOR' && !isKompletusRunning && (
+                  <button
+                    type="button"
+                    onClick={handleKompletus}
+                    disabled={isGenerating || !prompt.trim()}
+                    className="rounded-lg bg-[#ff79c6]/15 p-2 text-[#ff79c6] transition-colors hover:bg-[#ff79c6] hover:text-bg disabled:opacity-30"
+                    title="KOMPLETUS: Full pipeline with deep research + validation"
+                  >
+                    <Sparkles size={14} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !prompt.trim()}
+                  className={`rounded-lg p-2 transition-colors disabled:opacity-50 ${
+                    isBuilderMode
+                      ? 'bg-[#50fa7b]/20 text-[#50fa7b] hover:bg-[#50fa7b] hover:text-bg'
+                      : isM1ndMode
+                        ? 'bg-[#b026ff]/20 text-[#b026ff] hover:bg-[#b026ff] hover:text-bg'
+                        : 'bg-accent-dim text-accent hover:bg-accent hover:text-bg'
+                  }`}
+                >
+                  {isGenerating || isKompletusRunning ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                </button>
+              </div>
+            </div>
           </div>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleGenerate();
-              }
-            }}
-            placeholder={
-              isM1ndMode 
-                ? "Query m1nd graph engine... (e.g. 'where is auth handled?')" 
-                : mode === 'KONSTRUKTOR' 
-                  ? "Describe the system you want to build..." 
-                  : "Ask to modify the graph topology or explain behavior..."
-            }
-            className={`w-full h-full bg-bg border rounded-lg p-3 text-text-main font-mono text-[12px] resize-none outline-none custom-scrollbar transition-all duration-300 ${
-              isBuilderMode
-                ? 'border-[#50fa7b]/30 focus:border-[#50fa7b] focus:shadow-[0_0_12px_rgba(80,250,123,0.2)]'
-                : isM1ndMode 
-                  ? 'border-[#b026ff]/30 focus:border-[#b026ff] focus:shadow-[0_0_12px_rgba(176,38,255,0.2)]' 
-                  : 'border-border-subtle focus:border-accent focus:shadow-[0_0_12px_rgba(0,242,255,0.15)]'
-            }`}
-          />
-          <button 
-            onClick={handleGenerate}
-            disabled={isGenerating || !prompt.trim()}
-            className={`absolute bottom-3 right-3 p-1.5 disabled:opacity-50 rounded transition-colors cursor-pointer ${
-              isBuilderMode
-                ? 'bg-[#50fa7b]/20 text-[#50fa7b] hover:bg-[#50fa7b] hover:text-bg'
-                : isM1ndMode 
-                  ? 'bg-[#b026ff]/20 text-[#b026ff] hover:bg-[#b026ff] hover:text-bg' 
-                  : 'bg-accent-dim text-accent hover:bg-accent hover:text-bg'
-            }`}
-          >
-            {isGenerating || isKompletusRunning ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          </button>
-          {/* KOMPLETUS quick-launch */}
-          {mode === 'KONSTRUKTOR' && !isKompletusRunning && (
-            <button
-              onClick={handleKompletus}
-              disabled={isGenerating || !prompt.trim()}
-              className="absolute bottom-3 right-12 p-1.5 disabled:opacity-30 rounded transition-colors cursor-pointer bg-[#ff79c6]/15 text-[#ff79c6] hover:bg-[#ff79c6] hover:text-bg"
-              title="KOMPLETUS: Full pipeline with deep research + validation"
-            >
-              <Sparkles size={14} />
-            </button>
+
+          {showUtilityRail && (
+            <div className="hidden rounded-[18px] border border-border-subtle bg-[#050608]/70 p-3 xl:flex flex-col justify-center">
+              <div className="flex items-center justify-between text-[10px] uppercase opacity-70 font-mono">
+                <span>Flow</span>
+                <span>{railProgress}%</span>
+              </div>
+              <div className="w-full h-1 bg-border-subtle rounded-sm my-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-sm transition-all duration-500 ${
+                    isBuilderMode
+                      ? 'bg-[#50fa7b] shadow-[0_0_10px_rgba(80,250,123,0.75)]'
+                      : 'bg-accent shadow-[0_0_10px_var(--color-accent)]'
+                  }`}
+                  style={{ width: `${railProgress}%` }}
+                />
+              </div>
+              <div className="text-[9px] flex justify-between mb-2 font-mono text-text-dim">
+                <span>{railCompletedNodes}/{railTotalNodes} modules</span>
+                <span>{isBuilderMode ? 'builder' : isM1ndMode ? 'm1nd' : 'architect'}</span>
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={graphTotalNodes === 0}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-border-subtle/50 text-text-dim p-1.5 text-[9px] font-bold rounded uppercase hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-30"
+                  title="Export graph as JSON"
+                >
+                  <Download size={10} /> Export
+                </button>
+                <button
+                  type="button"
+                  onClick={handleImport}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-border-subtle/50 text-text-dim p-1.5 text-[9px] font-bold rounded uppercase hover:text-accent hover:bg-accent/10 transition-colors"
+                  title="Import graph from JSON"
+                >
+                  <Upload size={10} /> Import
+                </button>
+              </div>
+            </div>
           )}
-        </div>
-        
-        <div className="w-[240px] border-l border-border-subtle pl-5 flex flex-col justify-center">
-          <div className="text-[11px] uppercase opacity-70 font-mono">Autopilot Progress</div>
-          <div className="w-full h-1 bg-border-subtle rounded-sm my-2 overflow-hidden">
-            <div 
-              className="h-full bg-accent rounded-sm shadow-[0_0_10px_var(--color-accent)] transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <div className="text-[10px] flex justify-between mb-2 font-mono">
-            <span>{completedNodes}/{totalNodes} modules</span>
-            <span>{progress}%</span>
-          </div>
-          <div className="flex gap-1.5">
-            <button 
-              onClick={handleExport}
-              disabled={totalNodes === 0}
-              className="flex-1 flex items-center justify-center gap-1.5 bg-border-subtle/50 text-text-dim p-1.5 text-[9px] font-bold cursor-pointer rounded uppercase hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-30"
-              title="Export graph as JSON"
-            >
-              <Download size={10} /> Export
-            </button>
-            <button 
-              onClick={handleImport}
-              className="flex-1 flex items-center justify-center gap-1.5 bg-border-subtle/50 text-text-dim p-1.5 text-[9px] font-bold cursor-pointer rounded uppercase hover:text-accent hover:bg-accent/10 transition-colors"
-              title="Import graph from JSON"
-            >
-              <Upload size={10} /> Import
-            </button>
-          </div>
         </div>
       </div>
     </footer>

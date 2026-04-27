@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "product-dna-pack@1",
+  "id": "domain/smb-operations",
+  "version": "1.0.0",
+  "family": "domain",
+  "title": "SMB Operations Core",
+  "summary": "Reusable small-business primitives for scheduling, CRM, work orders, messaging, inventory, billing, and operations queues.",
+  "status": "seed",
+  "appliesTo": {
+    "nodeTypes": ["backend", "frontend", "database", "service", "workflow", "integration"],
+    "screenTypes": ["dashboard", "form", "list", "detail", "chat", "wizard"],
+    "intents": ["small business", "crm", "booking", "whatsapp", "invoice", "inventory", "repair", "delivery", "restaurant", "service"]
+  },
+  "retrieval": {
+    "description": "Use when a requested product looks like an SMB operating system, service workflow, booking surface, CRM, WhatsApp inbox, repair flow, billing flow, or delivery/inventory app.",
+    "keywords": ["crm", "booking", "schedule", "client", "customer", "whatsapp", "invoice", "payment", "work order", "inventory", "delivery", "queue", "restaurant", "pos"],
+    "donorSources": [
+      {
+        "label": "Cal.com",
+        "url": "https://cal.com/docs",
+        "kind": "docs",
+        "notes": "Scheduling, availability, bookings, and calendar primitives."
+      },
+      {
+        "label": "Chatwoot",
+        "url": "https://www.chatwoot.com/docs/",
+        "kind": "docs",
+        "notes": "Inbox, conversations, contacts, channels, and team assignment."
+      },
+      {
+        "label": "Odoo",
+        "url": "https://www.odoo.com/documentation/",
+        "kind": "docs",
+        "notes": "Appointments, repairs, POS, inventory, accounting, and subscriptions."
+      },
+      {
+        "label": "ERPNext",
+        "url": "https://docs.frappe.io/erpnext/",
+        "kind": "docs",
+        "notes": "Accounting, stock, selling, buying, support, and workflow primitives."
+      },
+      {
+        "label": "Twenty CRM",
+        "url": "https://twenty.com/developers",
+        "kind": "docs",
+        "notes": "Modern CRM object model and extensibility donor."
+      }
+    ]
+  },
+  "directives": {
+    "prompt": [
+      "Model SMB apps through reusable primitives: Party, Resource, Request, Thread, Assignment, Policy, Transaction, Schedule, Reference, and LineItem.",
+      "Every workflow should have explicit lifecycle states and conflict handling.",
+      "UI screens must expose the next operational action, not just records.",
+      "Integrations must be treated as untrusted external systems with idempotency and reconciliation."
+    ],
+    "requiredElements": [
+      "Canonical entity graph with relationships and lifecycle states",
+      "Conflict and idempotency policy for mutating workflows",
+      "Audit or history record for customer, billing, scheduling, and message mutations",
+      "Operational dashboard with pending, blocked, failed, and recently completed states"
+    ],
+    "forbiddenPatterns": [
+      "crud-only admin with no workflow states",
+      "messages disconnected from customer records",
+      "payments without reconciliation",
+      "calendar actions without overlap checks",
+      "deleting active business records without soft-delete or constraints"
+    ],
+    "allowedSubstitutions": [
+      "Use generic Party/Request/Transaction names internally when the vertical term is unclear.",
+      "Use soft-delete if hard relational constraints are not available.",
+      "Use mocked provider references during prototype generation, but keep provider reference fields in the model."
+    ],
+    "stackHints": [
+      "Postgres with Drizzle or Kysely is the default for relational SMB state.",
+      "Use Hono or Fastify for API surfaces unless an enterprise framework is explicitly needed.",
+      "Use TanStack Query for frontend server state and optimistic workflow updates."
+    ]
+  },
+  "validators": [
+    {
+      "id": "state_machine_validator",
+      "severity": "fail",
+      "description": "Core workflows must have explicit allowed state transitions.",
+      "evidence": "Model/schema fields, service transition functions, or generated workflow tests."
+    },
+    {
+      "id": "money_conservation_validator",
+      "severity": "fail",
+      "description": "Billing/payment flows must preserve amounts, provider references, and reconciliation status.",
+      "evidence": "Invoice/payment schema, mutation tests, and audit history."
+    },
+    {
+      "id": "schedule_overlap_validator",
+      "severity": "fail",
+      "description": "Booking and delivery workflows must guard against overlapping or impossible time windows.",
+      "evidence": "Scheduling tests and error-state UI."
+    }
+  ],
+  "receipts": {
+    "required": ["entity-map", "workflow-state-tests", "audit-history-proof"],
+    "optional": ["provider-webhook-proof", "calendar-overlap-proof", "payment-reconciliation-proof"]
+  },
+  "provenance": {
+    "capturedAt": "2026-04-26",
+    "sourceType": "sidecar-research",
+    "sourceUrls": [
+      "https://cal.com/docs",
+      "https://www.chatwoot.com/docs/",
+      "https://www.odoo.com/documentation/",
+      "https://docs.frappe.io/erpnext/",
+      "https://twenty.com/developers"
+    ],
+    "notes": "Seeded from SMB/domain-pack sidecar research."
+  }
+}

@@ -1,11 +1,18 @@
 import dagre from 'dagre';
-import { Node, Edge } from '@xyflow/react';
+import type { Node, Edge } from '@xyflow/react';
 
 // Demystifier footprint should closely match the real rendered CyberNode card.
 const nodeWidth = 220;
 const nodeHeight = 180;
 
-export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB') => {
+export const getLayoutedElements = <
+  NodeType extends Node = Node,
+  EdgeType extends Edge = Edge,
+>(
+  nodes: NodeType[],
+  edges: EdgeType[],
+  direction = 'TB',
+) => {
   const isHorizontal = direction === 'LR';
   const dagreGraph = new dagre.graphlib.Graph();
 
@@ -34,7 +41,7 @@ export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'T
       },
     };
 
-    return newNode as Node;
+    return newNode as NodeType;
   });
 
   return { nodes: newNodes, edges };

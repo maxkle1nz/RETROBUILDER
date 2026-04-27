@@ -1,7 +1,7 @@
 /**
  * NodeInspector.tsx
  * Full SSOT node editor — slides in from the right as a 420px drawer.
- * Tabs: CORE | SPEC | RATIONALE | GROUNDING | CONNECTIONS
+ * Tabs: CORE | SPEC | RATIONALE | GROUNDING | UIX | CONNECTIONS
  *
  * All edits call updateNode() on blur/save — no separate "submit".
  */
@@ -13,18 +13,20 @@ import {
   Network, Plus, Trash2, Save,
 } from 'lucide-react';
 import { useGraphStore } from '../store/useGraphStore';
-import type { NodeData } from '../lib/api';
+import { performDeepResearch, type LinkData, type NodeData } from '../lib/api';
 import ConnectionSuggester from './ConnectionSuggester';
+import SpecularCreateEditor from './SpecularCreateEditor';
 
 // ─── Tab types ────────────────────────────────────────────────────────────────
 
-type InspectorTab = 'core' | 'spec' | 'rationale' | 'grounding' | 'connections';
+type InspectorTab = 'core' | 'spec' | 'rationale' | 'grounding' | 'uix' | 'connections';
 
 const TABS: { id: InspectorTab; label: string; icon: React.ReactNode }[] = [
   { id: 'core',        label: 'Core',        icon: <Server size={10} />       },
   { id: 'spec',        label: 'Spec',        icon: <CheckCircle2 size={10} /> },
   { id: 'rationale',   label: 'Rationale',   icon: <FileText size={10} />     },
   { id: 'grounding',   label: 'Grounding',   icon: <FlaskConical size={10} /> },
+  { id: 'uix',         label: 'UIX',         icon: <Layout size={10} />       },
   { id: 'connections', label: 'Connections', icon: <Network size={10} />      },
 ];
 
@@ -46,6 +48,9 @@ const STATUS_META = {
   'in-progress': { label: 'In Progress', color: '#00f2ff' },
   completed:     { label: 'Done',        color: '#50fa7b' },
 };
+
+type OutgoingConnection = { link: LinkData; target: NodeData };
+type IncomingConnection = { link: LinkData; source: NodeData };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -85,16 +90,22 @@ export default function NodeInspector() {
 
   const typeColor = node ? (TYPE_META[node.type]?.color ?? '#94a3b8') : '#94a3b8';
 
-  const outgoing = node
-    ? graphData.links.filter((l) => l.source === node.id)
-          .map((l) => ({ link: l, target: graphData.nodes.find((n) => n.id === l.target) }))
-          .filter((x) => x.target)
+  const outgoing: OutgoingConnection[] = node
+    ? graphData.links.reduce<OutgoingConnection[]>((connections, link) => {
+        if (link.source !== node.id) return connections;
+        const target = graphData.nodes.find((n) => n.id === link.target);
+        if (target) connections.push({ link, target });
+        return connections;
+      }, [])
     : [];
 
-  const incoming = node
-    ? graphData.links.filter((l) => l.target === node.id)
-          .map((l) => ({ link: l, source: graphData.nodes.find((n) => n.id === l.source) }))
-          .filter((x) => x.source)
+  const incoming: IncomingConnection[] = node
+    ? graphData.links.reduce<IncomingConnection[]>((connections, link) => {
+        if (link.target !== node.id) return connections;
+        const source = graphData.nodes.find((n) => n.id === link.source);
+        if (source) connections.push({ link, source });
+        return connections;
+      }, [])
     : [];
 
   return (
@@ -175,11 +186,12 @@ export default function NodeInspector() {
               {tab === 'spec'        && <SpecTab        node={node} updateNode={updateNode} typeColor={typeColor} />}
               {tab === 'rationale'   && <RationaleTab   node={node} updateNode={updateNode} />}
               {tab === 'grounding'   && <GroundingTab   node={node} updateNode={updateNode} typeColor={typeColor} />}
+              {tab === 'uix'         && <SpecularCreateEditor node={node} updateNode={updateNode} typeColor={typeColor} />}
               {tab === 'connections' && (
                 <ConnectionsTab
                   node={node}
-                  outgoing={outgoing as any}
-                  incoming={incoming as any}
+                  outgoing={outgoing}
+                  incoming={incoming}
                   removeLink={removeLink}
                   showSuggester={showSuggester}
                   setShowSuggester={setShowSuggester}
@@ -410,7 +422,6 @@ function GroundingTab({
   async function handleDeepResearch() {
     setResearching(true);
     try {
-      const { performDeepResearch } = await import('../lib/api');
       const result = await performDeepResearch(node, projectContext);
       setLocalVal(result);
       updateNode(node.id, { researchContext: result });
@@ -488,8 +499,8 @@ function ConnectionsTab({
   node, outgoing, incoming, removeLink, showSuggester, setShowSuggester, typeColor,
 }: {
   node: NodeData;
-  outgoing: { link: any; target: NodeData }[];
-  incoming: { link: any; source: NodeData }[];
+  outgoing: OutgoingConnection[];
+  incoming: IncomingConnection[];
   removeLink: (s: string, t: string) => void;
   showSuggester: boolean;
   setShowSuggester: (v: boolean) => void;

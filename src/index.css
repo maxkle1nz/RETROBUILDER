@@ -22,6 +22,21 @@
   --font-display: 'Orbitron', 'Inter', sans-serif;
 }
 
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    background: var(--color-bg);
+  }
+
+  body {
+    margin: 0;
+    color: var(--color-text-main);
+    overflow: hidden;
+  }
+}
+
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
@@ -136,6 +151,28 @@
 @keyframes buildGlow {
   0%, 100% { box-shadow: 0 0 4px var(--color-accent); }
   50% { box-shadow: 0 0 12px var(--color-accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .grid-pulse,
+  .animate-pulse,
+  .animate-spin {
+    animation: none !important;
+  }
+
+  .react-flow__edge.animated .react-flow__edge-path {
+    animation: none !important;
+    stroke-dasharray: none;
+  }
 }
 
 /* ── NodeInspector shared input tokens ───────────────────────────────────── */

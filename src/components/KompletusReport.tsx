@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
 import { useBuildStore } from '../store/useBuildStore';
-import { createSession, saveSession, startOmxBuild, type NodeData, type KompletusResult, type SpecularAuditResult, type UserMoment, type NodeScreenEntry } from '../lib/api';
+import { createSession, saveSession, startOmxBuild, OmxBuildBlockedError, type NodeData, type KompletusResult, type SpecularAuditResult, type SpecularCreateResponse } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X, Check, AlertTriangle, ChevronDown, ChevronRight,
   Shield, Database, Globe, Monitor, Server, Zap,
-  FileText, Code, Search, Loader2, Edit3, Save,
-  Eye, Layout,
+  FileText, Code, Search, Loader2, Edit3,
+  Eye, Layout, Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,6 +35,7 @@ const STAGE_LABELS: Record<string, string> = {
   triage: '🔬 SMART TRIAGE',
   research: '📚 DEEP RESEARCH',
   specular: '🪞 SPECULAR',
+  specular_create: '✨ SPECULAR CREATE',
   l1ght: '💡 L1GHT PRE-FLIGHT',
   quality: '✅ QUALITY GATE',
   complete: '🎯 KOMPLETUS',
@@ -42,27 +43,12 @@ const STAGE_LABELS: Record<string, string> = {
 
 // ─── Node Card (editable) ─────────────────────────────────────────────
 
-function NodeCard({ node, research, onUpdate }: {
+function NodeCard({ node, research }: {
   node: NodeData;
   research?: { report: string; meta: Record<string, unknown> };
-  onUpdate: (id: string, updates: Partial<NodeData>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editDC, setEditDC] = useState(node.data_contract || '');
-  const [editEH, setEditEH] = useState((node.error_handling || []).join('\n'));
-  const [editAC, setEditAC] = useState((node.acceptance_criteria || []).join('\n'));
   const [showResearch, setShowResearch] = useState(false);
-
-  const handleSave = () => {
-    onUpdate(node.id, {
-      data_contract: editDC,
-      error_handling: editEH.split('\n').filter(l => l.trim()),
-      acceptance_criteria: editAC.split('\n').filter(l => l.trim()),
-    });
-    setEditing(false);
-    toast.success(`${node.label} updated`);
-  };
 
   const color = TYPE_COLORS[node.type] || '#888';
 
@@ -101,89 +87,35 @@ function NodeCard({ node, research, onUpdate }: {
 
               {/* Data Contract */}
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[9px] uppercase tracking-widest text-text-dim">Data Contract</span>
-                  {!editing && (
-                    <button onClick={() => setEditing(true)} className="text-accent hover:text-white">
-                      <Edit3 size={10} />
-                    </button>
-                  )}
-                </div>
-                {editing ? (
-                  <textarea
-                    value={editDC}
-                    onChange={(e) => setEditDC(e.target.value)}
-                    className="w-full bg-bg border border-accent/30 rounded px-2 py-1.5 text-xs text-text-main font-mono outline-none resize-none"
-                    rows={2}
-                  />
-                ) : (
-                  <div className="text-xs text-accent font-mono bg-bg/50 rounded px-2 py-1.5">{node.data_contract || '—'}</div>
-                )}
+                <div className="text-[9px] uppercase tracking-widest text-text-dim mb-1">Data Contract</div>
+                <div className="text-xs text-accent font-mono bg-bg/50 rounded px-2 py-1.5">{node.data_contract || '—'}</div>
               </div>
 
               {/* Acceptance Criteria */}
               <div>
                 <div className="text-[9px] uppercase tracking-widest text-text-dim mb-1">Acceptance Criteria ({node.acceptance_criteria?.length || 0})</div>
-                {editing ? (
-                  <textarea
-                    value={editAC}
-                    onChange={(e) => setEditAC(e.target.value)}
-                    className="w-full bg-bg border border-accent/30 rounded px-2 py-1.5 text-xs text-text-main font-mono outline-none resize-none"
-                    rows={3}
-                    placeholder="One criterion per line"
-                  />
-                ) : (
-                  <ul className="space-y-1">
-                    {(node.acceptance_criteria || []).map((ac, i) => (
-                      <li key={i} className="text-xs text-text-main flex items-start gap-1.5">
-                        <Check size={10} className="text-[#50fa7b] mt-0.5 shrink-0" />
-                        <span>{ac}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <ul className="space-y-1">
+                  {(node.acceptance_criteria || []).map((ac, i) => (
+                    <li key={i} className="text-xs text-text-main flex items-start gap-1.5">
+                      <Check size={10} className="text-[#50fa7b] mt-0.5 shrink-0" />
+                      <span>{ac}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               {/* Error Handling */}
               <div>
                 <div className="text-[9px] uppercase tracking-widest text-text-dim mb-1">Error Handling ({node.error_handling?.length || 0})</div>
-                {editing ? (
-                  <textarea
-                    value={editEH}
-                    onChange={(e) => setEditEH(e.target.value)}
-                    className="w-full bg-bg border border-accent/30 rounded px-2 py-1.5 text-xs text-text-main font-mono outline-none resize-none"
-                    rows={3}
-                    placeholder="One strategy per line"
-                  />
-                ) : (
-                  <ul className="space-y-1">
-                    {(node.error_handling || []).map((eh, i) => (
-                      <li key={i} className="text-xs text-text-main flex items-start gap-1.5">
-                        <AlertTriangle size={10} className="text-[#ffcb6b] mt-0.5 shrink-0" />
-                        <span>{eh}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <ul className="space-y-1">
+                  {(node.error_handling || []).map((eh, i) => (
+                    <li key={i} className="text-xs text-text-main flex items-start gap-1.5">
+                      <AlertTriangle size={10} className="text-[#ffcb6b] mt-0.5 shrink-0" />
+                      <span>{eh}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-
-              {/* Edit controls */}
-              {editing && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSave}
-                    className="px-3 py-1.5 bg-accent text-bg rounded text-[10px] uppercase tracking-widest font-bold flex items-center gap-1.5 hover:bg-white transition-colors"
-                  >
-                    <Save size={10} /> Save
-                  </button>
-                  <button
-                    onClick={() => setEditing(false)}
-                    className="px-3 py-1.5 border border-border-subtle rounded text-[10px] uppercase tracking-widest text-text-dim hover:text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
 
               {/* Research toggle */}
               {research && (
@@ -224,7 +156,7 @@ function NodeCard({ node, research, onUpdate }: {
 // ─── Pipeline Progress ────────────────────────────────────────────────
 
 function PipelineProgress({ events }: { events: Array<{ stage: string; status: string; message?: string }> }) {
-  const stages = ['konstruktor', 'hardener', 'triage', 'research', 'specular', 'l1ght', 'quality', 'complete'];
+  const stages = ['konstruktor', 'hardener', 'triage', 'research', 'specular', 'specular_create', 'l1ght', 'quality', 'complete'];
   const completedStages = new Set(events.filter(e => e.status === 'done').map(e => e.stage));
   const runningStage = events.filter(e => e.status === 'running').pop()?.stage;
 
@@ -465,6 +397,123 @@ function SpecularView({ specular }: { specular: SpecularAuditResult }) {
   );
 }
 
+function SpecularCreateView({ specularCreate }: { specularCreate: KompletusResult['specularCreate'] }) {
+  if (!specularCreate || specularCreate.artifacts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="bg-[#0c0e14] border border-border-subtle rounded-lg overflow-hidden">
+      <div className="px-4 py-3 border-b border-border-subtle flex items-center gap-2">
+        <Sparkles size={12} className="text-accent" />
+        <span className="text-[10px] uppercase tracking-widest font-bold text-accent">SPECULAR CREATE</span>
+        <span className="text-[9px] text-text-dim ml-auto">
+          {specularCreate.gate.designGateStatus.toUpperCase()} · {specularCreate.gate.designScore}%
+        </span>
+      </div>
+      <div className="p-4 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="bg-bg/50 border border-border-subtle rounded p-3">
+            <div className="text-[9px] uppercase tracking-widest text-text-dim">Design Profile</div>
+            <div className="text-sm text-text-main mt-1">{specularCreate.designProfile}</div>
+          </div>
+          <div className="bg-bg/50 border border-border-subtle rounded p-3">
+            <div className="text-[9px] uppercase tracking-widest text-text-dim">Generated Previews</div>
+            <div className="text-sm text-text-main mt-1">{specularCreate.artifacts.length}</div>
+          </div>
+          <div className="bg-bg/50 border border-border-subtle rounded p-3">
+            <div className="text-[9px] uppercase tracking-widest text-text-dim">Affected Nodes</div>
+            <div className="text-sm text-text-main mt-1">{specularCreate.gate.affectedNodeIds.length}</div>
+          </div>
+        </div>
+
+        {specularCreate.warnings.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[10px] uppercase tracking-widest text-[#ffcb6b]">Design Findings</div>
+            {specularCreate.warnings.map((warning) => (
+              <div key={warning} className="bg-[#ffcb6b]/5 border border-[#ffcb6b]/20 rounded p-3 text-[11px] text-text-main">
+                {warning}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {specularCreate.artifacts.map((artifact: SpecularCreateResponse) => {
+            const variant = artifact.variantCandidates.find((entry) => entry.id === artifact.selectedVariantId);
+            return (
+              <div key={artifact.nodeId} className="bg-bg/50 border border-border-subtle rounded-lg p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-accent">{artifact.nodeId}</div>
+                    <div className="text-sm font-semibold text-text-main mt-1">{variant?.label || artifact.previewArtifact.componentName}</div>
+                    <div className="text-[11px] text-text-dim mt-1">{artifact.previewArtifact.summary}</div>
+                  </div>
+                  <div className={`text-[10px] font-bold ${artifact.designVerdict.status === 'passed' ? 'text-[#50fa7b]' : 'text-[#ffcb6b]'}`}>
+                    {artifact.designVerdict.score}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {artifact.selectedReferenceIds.map((referenceId) => {
+                    const ref = artifact.referenceCandidates.find((entry) => entry.id === referenceId);
+                    return (
+                      <span key={referenceId} className="text-[9px] uppercase tracking-widest px-2 py-1 rounded bg-accent/10 text-accent">
+                        {ref?.category || referenceId}
+                      </span>
+                    );
+                  })}
+                </div>
+
+                {artifact.activeProductDnaContract?.packBindings?.length ? (
+                  <div className="rounded-[14px] border border-accent/15 bg-accent/5 px-3 py-3">
+                    <div className="text-[9px] uppercase tracking-widest text-accent">Product DNA</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {artifact.activeProductDnaContract.packBindings.slice(0, 5).map((binding) => (
+                        <span key={`${artifact.nodeId}-${binding.id}`} className="rounded-full bg-black/30 px-2 py-1 text-[9px] uppercase tracking-widest text-text-main">
+                          {binding.family}: {binding.title}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-[10px] text-text-dim">
+                      Receipts: {artifact.activeProductDnaContract.receipts.required.slice(0, 5).join(', ') || 'none'}
+                    </div>
+                  </div>
+                ) : null}
+
+                {artifact.knowledgeContextBundle?.evidence?.length ? (
+                  <div className="rounded-[14px] border border-[#ffcb6b]/20 bg-[#ffcb6b]/5 px-3 py-3">
+                    <div className="text-[9px] uppercase tracking-widest text-[#ffcb6b]">Knowledge Bank</div>
+                    <div className="mt-2 text-[10px] text-text-dim">
+                      Receipt: {artifact.knowledgeContextBundle.receipt.receiptId} · Evidence: {artifact.knowledgeContextBundle.evidence.length}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {artifact.knowledgeContextBundle.evidence.slice(0, 4).map((entry) => (
+                        <span key={`${artifact.nodeId}-${entry.chunkId}`} className="rounded-full bg-black/30 px-2 py-1 text-[9px] uppercase tracking-widest text-text-main">
+                          {entry.trustLevel}: {entry.title}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {artifact.previewArtifact.blocks.map((block) => (
+                    <div key={block.id} className="rounded-[14px] border border-white/10 bg-white/5 px-3 py-3">
+                      <div className="text-[9px] uppercase tracking-widest text-accent">{block.kind}</div>
+                      <div className="text-[11px] text-text-main mt-1">{block.title}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Report Modal ────────────────────────────────────────────────
 
 export default function KompletusReport() {
@@ -473,7 +522,6 @@ export default function KompletusReport() {
     kompletusResult,
     kompletusProgress,
     closeKompletusReport,
-    updateKompletusNode,
     setGraphData,
     setManifesto,
     setArchitecture,
@@ -483,6 +531,8 @@ export default function KompletusReport() {
     projectContext,
     importMeta,
     hydrateSession,
+    setSelectedNode,
+    openInspector,
   } = useGraphStore();
 
   const [activeView, setActiveView] = useState<'modules' | 'artifacts' | 'specular' | 'summary'>('modules');
@@ -558,6 +608,20 @@ export default function KompletusReport() {
 
       toast.success(`KOMPLETUS → OMX: real build ${build.buildId.slice(0, 8)} started`);
     } catch (error) {
+      if (error instanceof OmxBuildBlockedError) {
+        setActiveView('specular');
+        const blockedNodeId = error.design?.failingNodeIds?.[0] || error.design?.affectedNodeIds?.[0];
+        if (blockedNodeId) {
+          const blockedNode = result.graph.nodes.find((node) => node.id === blockedNodeId) || null;
+          useGraphStore.setState({
+            selectedNode: (blockedNode as NodeData) || null,
+            focusNodeId: blockedNodeId,
+            inspectorNodeId: blockedNodeId,
+          });
+        }
+        toast.error(error.message);
+        return;
+      }
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Failed to hand off KOMPLETUS blueprint to OMX');
     }
@@ -624,9 +688,9 @@ export default function KompletusReport() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         {activeView === 'modules' && (
-          <div className="max-w-5xl mx-auto space-y-2">
+            <div className="max-w-5xl mx-auto space-y-2">
             <div className="text-[10px] uppercase tracking-widest text-text-dim mb-3">
-              {result.graph.nodes.length} Modules — Click to expand · Click ✏️ to edit fields
+              {result.graph.nodes.length} Modules — review the generated blueprint here, then continue into the main node editor for SSOT editing.
             </div>
             {result.graph.nodes
               .sort((a, b) => (a.priority || 0) - (b.priority || 0))
@@ -635,7 +699,6 @@ export default function KompletusReport() {
                   key={node.id}
                   node={node}
                   research={result.research[node.id]}
-                  onUpdate={updateKompletusNode}
                 />
               ))}
           </div>
@@ -683,7 +746,10 @@ export default function KompletusReport() {
         )}
 
         {activeView === 'specular' && result.specular && (
-          <SpecularView specular={result.specular} />
+          <div className="max-w-5xl mx-auto space-y-4">
+            <SpecularView specular={result.specular} />
+            <SpecularCreateView specularCreate={result.specularCreate} />
+          </div>
         )}
 
         {activeView === 'summary' && (

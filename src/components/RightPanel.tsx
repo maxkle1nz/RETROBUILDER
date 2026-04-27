@@ -5,11 +5,11 @@ import {
   activateSessionDraft,
   createSession,
   ExportBlockedError,
+  OmxBuildBlockedError,
   exportSessionDraftToOmx,
   getSessionGapsDraft,
   getSessionImpactDraft,
   getSessionReadinessDraft,
-  performDeepResearch,
   runSessionAdvancedDraft,
   saveSession,
   startOmxBuild,
@@ -32,12 +32,15 @@ import {
   CheckSquare,
   AlertTriangle,
   Search,
+  Sparkles,
+  PencilRuler,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
+import KnowledgeBankPanel from './KnowledgeBankPanel';
 
-type PanelTab = 'ready' | 'impact' | 'gaps' | 'research' | 'advanced';
+type PanelTab = 'ready' | 'impact' | 'gaps' | 'research' | 'uix' | 'knowledge' | 'advanced';
 
 export default function RightPanel() {
   const {
@@ -56,26 +59,20 @@ export default function RightPanel() {
     projectContext,
     updateNode,
     hydrateSession,
+    openInspector,
+    setSelectedNode,
   } = useGraphStore();
   const [tab, setTab] = useState<PanelTab>('ready');
   const [readiness, setReadiness] = useState<BlueprintReadinessReport | null>(null);
   const [impact, setImpact] = useState<BlueprintImpactReport | null>(null);
   const [gaps, setGaps] = useState<BlueprintGapReport | null>(null);
-  const [researchResult, setResearchResult] = useState<string | null>(null);
-
-  // Sync researchResult from node's persisted data when selection changes
-  useEffect(() => {
-    if (selectedNode?.researchContext) {
-      setResearchResult(selectedNode.researchContext);
-    } else {
-      setResearchResult(null);
-    }
-  }, [selectedNode?.id, selectedNode?.researchContext]);
   const [advancedData, setAdvancedData] = useState<SessionAdvancedReport | null>(null);
   const [advancedAction, setAdvancedAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [blockedUixNodeId, setBlockedUixNodeId] = useState<string | null>(null);
+  const [blockedUixDesign, setBlockedUixDesign] = useState<OmxBuildBlockedError['design'] | null>(null);
 
   const currentDraft = useMemo(() => ({
     name: activeSessionName,
@@ -176,20 +173,6 @@ export default function RightPanel() {
     }
   }
 
-  async function runResearch() {
-    if (!selectedNode) return;
-    setLoading(true);
-    try {
-      const result = await performDeepResearch(selectedNode, projectContext);
-      setResearchResult(result);
-    } catch (error) {
-      console.error(error);
-      toast.error('Deep research failed');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function runAdvancedAction(action: string) {
     if (!activeSessionId) return;
     setLoading(true);
@@ -277,7 +260,21 @@ export default function RightPanel() {
 
       toast.success(`OMX plan exported — real build ${build.buildId.slice(0, 8)} started`);
     } catch (error) {
-      if (error instanceof ExportBlockedError) {
+      if (error instanceof OmxBuildBlockedError) {
+        setTab('uix');
+        setBlockedUixDesign(error.design || null);
+        const blockedNodeId = error.design?.failingNodeIds?.[0] || error.design?.affectedNodeIds?.[0];
+        if (blockedNodeId) {
+          setBlockedUixNodeId(blockedNodeId);
+          const blockedNode = graphData.nodes.find((node) => node.id === blockedNodeId) || null;
+          useGraphStore.setState({
+            selectedNode: blockedNode,
+            focusNodeId: blockedNodeId,
+            inspectorNodeId: blockedNodeId,
+          });
+        }
+        toast.error(error.message);
+      } else if (error instanceof ExportBlockedError) {
         setReadiness(error.readiness || null);
         toast.error(error.message);
       } else {
@@ -301,7 +298,7 @@ export default function RightPanel() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-text-dim mb-1">Ralph Readiness</div>
+            <div className="text-[10px] uppercase tracking-widest text-text-dim mb-1">OMX Builder Readiness</div>
             {summaryBadge && (
               <span className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded ${summaryBadge.className}`}>
                 {summaryBadge.label}
@@ -314,7 +311,7 @@ export default function RightPanel() {
             className="flex items-center gap-2 bg-[#50fa7b]/10 border border-[#50fa7b]/30 text-[#50fa7b] px-3 py-2 rounded text-[10px] uppercase tracking-widest font-bold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={12} />
-            {exporting ? 'Exporting...' : 'Export to Ralph'}
+            {exporting ? 'Exporting...' : 'Build with OMX'}
           </button>
         </div>
 
@@ -494,7 +491,7 @@ export default function RightPanel() {
 
   function renderResearch() {
     if (!selectedNode) {
-      return <div className="text-sm text-text-dim">Select a node to ground it with donors, papers and implementation guidance.</div>;
+      return <div className="text-sm text-text-dim">Select a node to inspect saved grounding and jump into the SSOT editor.</div>;
     }
 
     return (
@@ -505,34 +502,160 @@ export default function RightPanel() {
           <div className="text-[11px] text-text-dim mt-2">{selectedNode.description}</div>
         </div>
         <button
-          onClick={runResearch}
-          disabled={loading}
-          className="w-full py-3 bg-accent/10 border border-accent/30 hover:bg-accent/20 text-accent rounded text-[11px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={() => useGraphStore.getState().openInspector(selectedNode.id)}
+          className="w-full py-3 bg-accent/10 border border-accent/30 hover:bg-accent/20 text-accent rounded text-[11px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
         >
-          <Search size={14} />
-          {loading ? 'Grounding...' : 'Run Grounding & Research'}
+          <PencilRuler size={14} />
+          Open Node Editor
         </button>
-        {researchResult && (
-          <div className="space-y-2">
-            <div className="bg-black/40 border border-border-subtle rounded p-3 prose prose-invert prose-sm max-w-none prose-a:text-accent prose-headings:text-text-main">
-              <ReactMarkdown>{researchResult}</ReactMarkdown>
-            </div>
-            {selectedNode && researchResult !== selectedNode.researchContext && (
-              <button
-                onClick={() => {
-                  updateNode(selectedNode.id, { researchContext: researchResult });
-                  toast.success(`Research saved to ${selectedNode.label}`);
-                }}
-                className="w-full py-2 bg-[#50fa7b]/10 border border-[#50fa7b]/30 hover:bg-[#50fa7b]/20 text-[#50fa7b] rounded text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
-              >
-                💾 Save Research to Node
-              </button>
-            )}
-            {selectedNode?.researchContext === researchResult && (
-              <div className="text-[10px] text-[#50fa7b]/60 text-center uppercase tracking-widest">✓ Saved to node</div>
-            )}
+        {selectedNode.researchContext ? (
+          <div className="bg-black/40 border border-border-subtle rounded p-3 prose prose-invert prose-sm max-w-none prose-a:text-accent prose-headings:text-text-main">
+            <ReactMarkdown>{selectedNode.researchContext}</ReactMarkdown>
+          </div>
+        ) : (
+          <div className="bg-surface/60 border border-border-subtle rounded p-3 text-[11px] text-text-dim leading-6">
+            No saved grounding yet. Use the node editor when you want to deepen research, refine contracts, or attach a live UIX preview.
           </div>
         )}
+      </div>
+    );
+  }
+
+  function renderUix() {
+    const activeUixNode = selectedNode || (blockedUixNodeId ? graphData.nodes.find((node) => node.id === blockedUixNodeId) || null : null);
+
+    if (!activeUixNode && blockedUixDesign) {
+      const blockedNodeLabel = blockedUixDesign.failingNodeIds?.[0] || blockedUixDesign.affectedNodeIds?.[0] || 'the blocked UI surface';
+      return (
+        <div className="space-y-4">
+          <div className="bg-[#ffcb6b]/10 border border-[#ffcb6b]/25 rounded p-4">
+            <div className="text-[10px] uppercase tracking-widest text-[#ffcb6b] mb-2">UIX Gate Blocked</div>
+            <div className="text-sm text-text-main">Resolve design blockers for {blockedNodeLabel} before starting OMX.</div>
+            {typeof blockedUixDesign.designScore === 'number' && (
+              <div className="text-[11px] text-text-dim mt-2">21st score: {blockedUixDesign.designScore}</div>
+            )}
+          </div>
+          <div className="space-y-2">
+            {blockedUixDesign.designFindings.map((finding) => (
+              <div key={finding} className="bg-surface/60 border border-border-subtle rounded p-3 text-[11px] text-text-main">
+                {finding}
+              </div>
+            ))}
+          </div>
+          {blockedUixNodeId && (
+            <button
+              onClick={() => useGraphStore.getState().openInspector(blockedUixNodeId)}
+              className="w-full py-3 bg-accent/10 border border-accent/30 hover:bg-accent/20 text-accent rounded text-[11px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+            >
+              <Sparkles size={14} />
+              Open UIX Editor
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    if (!activeUixNode) {
+      return <div className="text-sm text-text-dim">Select a frontend or user-facing node to inspect its live UIX surface.</div>;
+    }
+
+    if (!['frontend', 'external'].includes(activeUixNode.type)) {
+      return (
+        <div className="bg-surface/60 border border-border-subtle rounded p-3 text-[11px] text-text-dim leading-6">
+          This node is backend-only right now. UIX authoring is reserved for frontend and user-facing external surfaces.
+        </div>
+      );
+    }
+
+    if (!activeUixNode.previewArtifact) {
+      return (
+        <div className="space-y-4">
+          <div className="bg-surface/60 border border-border-subtle rounded p-3">
+            <div className="text-[10px] uppercase tracking-widest text-accent mb-1">UIX Surface</div>
+            <div className="text-sm text-text-main">{activeUixNode.label}</div>
+            <div className="text-[11px] text-text-dim mt-2">No live preview attached yet. Generate it from the node editor to lock a 21st-inspired interface to this contract.</div>
+          </div>
+          <button
+            onClick={() => useGraphStore.getState().openInspector(activeUixNode.id)}
+            className="w-full py-3 bg-accent/10 border border-accent/30 hover:bg-accent/20 text-accent rounded text-[11px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+          >
+            <Sparkles size={14} />
+            Open UIX Editor
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-surface/70 border border-border-subtle rounded p-3">
+            <div className="text-[9px] uppercase tracking-widest text-text-dim mb-1">Design Profile</div>
+            <div className="text-sm text-text-main">{activeUixNode.designProfile || '21st'}</div>
+          </div>
+          <div className="bg-surface/70 border border-border-subtle rounded p-3">
+            <div className="text-[9px] uppercase tracking-widest text-text-dim mb-1">Design Score</div>
+            <div className={`text-sm font-bold ${activeUixNode.designVerdict?.status === 'passed' ? 'text-[#50fa7b]' : 'text-[#ffcb6b]'}`}>
+              {activeUixNode.designVerdict?.score ?? '—'}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-surface/60 border border-border-subtle rounded p-3">
+          <div className="text-[10px] uppercase tracking-widest text-accent mb-1">Selected Variant</div>
+          <div className="text-sm text-text-main">
+            {activeUixNode.variantCandidates?.find((variant) => variant.id === activeUixNode.selectedVariantId)?.label || 'No variant selected'}
+          </div>
+          <div className="text-[11px] text-text-dim mt-2">{activeUixNode.previewArtifact.summary}</div>
+        </div>
+
+        {(activeUixNode.selectedReferenceIds?.length || 0) > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-text-dim mb-2">Active References</div>
+            <div className="flex flex-wrap gap-2">
+              {(activeUixNode.referenceCandidates || [])
+                .filter((reference) => (activeUixNode.selectedReferenceIds || []).includes(reference.id))
+                .map((reference) => (
+                  <span key={reference.id} className="text-[10px] px-2 py-1 rounded bg-accent/10 text-accent uppercase tracking-widest">
+                    {reference.category}
+                  </span>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {activeUixNode.activeProductDnaContract?.packBindings?.length ? (
+          <div className="bg-accent/5 border border-accent/15 rounded p-3">
+            <div className="text-[10px] uppercase tracking-widest text-accent mb-2">Product DNA</div>
+            <div className="flex flex-wrap gap-2">
+              {activeUixNode.activeProductDnaContract.packBindings.slice(0, 5).map((binding) => (
+                <span key={binding.id} className="text-[10px] px-2 py-1 rounded bg-black/30 text-text-main uppercase tracking-widest">
+                  {binding.family}
+                </span>
+              ))}
+            </div>
+            <div className="text-[11px] text-text-dim mt-2">
+              {activeUixNode.activeProductDnaContract.receipts.required.length} required receipt(s)
+            </div>
+          </div>
+        ) : null}
+
+        <div className="bg-black/35 border border-border-subtle rounded p-3 space-y-2">
+          {activeUixNode.previewArtifact.blocks.map((block) => (
+            <div key={block.id} className="rounded-[12px] border border-white/10 bg-white/5 px-3 py-2">
+              <div className="text-[9px] uppercase tracking-widest text-accent">{block.kind}</div>
+              <div className="text-[11px] text-text-main mt-1">{block.title}</div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={() => useGraphStore.getState().openInspector(activeUixNode.id)}
+          className="w-full py-3 bg-accent/10 border border-accent/30 hover:bg-accent/20 text-accent rounded text-[11px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+        >
+          <PencilRuler size={14} />
+          Open UIX Editor
+        </button>
       </div>
     );
   }
@@ -601,7 +724,7 @@ export default function RightPanel() {
       initial={{ x: 400 }}
       animate={{ x: 0 }}
       exit={{ x: 400 }}
-      className="w-[380px] border-l border-border-subtle bg-[rgba(16,18,24,0.95)] backdrop-blur-md flex flex-col z-30 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
+      className="w-[min(360px,calc(100vw-48px))] max-w-[calc(100vw-48px)] shrink-0 border-l border-border-subtle bg-[rgba(16,18,24,0.95)] backdrop-blur-md flex flex-col z-30 shadow-[-10px_0_30px_rgba(0,0,0,0.5)] xl:w-[380px] xl:max-w-[380px]"
     >
       <div className="h-[60px] border-b border-border-subtle flex items-center justify-between px-4 shrink-0">
         <div className="font-bold text-accent tracking-widest text-sm flex items-center gap-2">
@@ -640,13 +763,15 @@ export default function RightPanel() {
         ) : (
           <div className="space-y-5">
             <div className="flex flex-wrap gap-2">
-              {([
-                { id: 'ready' as PanelTab, Icon: CheckSquare, label: 'Ready' },
-                { id: 'impact' as PanelTab, Icon: Target, label: 'Impact' },
-                { id: 'gaps' as PanelTab, Icon: AlertTriangle, label: 'Gaps' },
-                { id: 'research' as PanelTab, Icon: Search, label: 'Grounding' },
-                { id: 'advanced' as PanelTab, Icon: Shield, label: 'Advanced' },
-              ]).map(({ id, Icon, label }) => (
+                {([
+                  { id: 'ready' as PanelTab, Icon: CheckSquare, label: 'Ready' },
+                  { id: 'impact' as PanelTab, Icon: Target, label: 'Impact' },
+                  { id: 'gaps' as PanelTab, Icon: AlertTriangle, label: 'Gaps' },
+                  { id: 'research' as PanelTab, Icon: Search, label: 'Grounding' },
+                  { id: 'uix' as PanelTab, Icon: Sparkles, label: 'UIX' },
+                  { id: 'knowledge' as PanelTab, Icon: Layers, label: 'Knowledge' },
+                  { id: 'advanced' as PanelTab, Icon: Shield, label: 'Advanced' },
+                ]).map(({ id, Icon, label }) => (
                 <button
                   key={id}
                   onClick={() => setTab(id)}
@@ -666,6 +791,8 @@ export default function RightPanel() {
             {tab === 'impact' && renderImpact()}
             {tab === 'gaps' && renderGaps()}
             {tab === 'research' && renderResearch()}
+            {tab === 'uix' && renderUix()}
+            {tab === 'knowledge' && <KnowledgeBankPanel />}
             {tab === 'advanced' && renderAdvanced()}
           </div>
         )}

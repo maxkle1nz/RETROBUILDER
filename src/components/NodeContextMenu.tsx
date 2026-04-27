@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
 import { performDeepResearch } from '../lib/api';
 import { toast } from 'sonner';
-import { Trash2, Edit3, CheckCircle2, PlayCircle, Circle, Copy, Search, Layers, Network, PanelRight } from 'lucide-react';
+import { Trash2, Edit3, CheckCircle2, PlayCircle, Circle, Copy, Search, Layers, Network, PanelRight, type LucideIcon } from 'lucide-react';
 
 interface ContextMenuProps {
   x: number;
@@ -11,6 +11,17 @@ interface ContextMenuProps {
   nodeLabel: string;
   onClose: () => void;
 }
+
+type ContextMenuItem =
+  | {
+      divider?: false;
+      icon: LucideIcon;
+      label: string;
+      action: () => void | Promise<void>;
+      color: string;
+      disabled?: boolean;
+    }
+  | { divider: true };
 
 export default function NodeContextMenu({ x, y, nodeId, nodeLabel, onClose }: ContextMenuProps) {
   const { removeNode, updateNode, setSelectedNode, graphData, selectedNodes, toggleNodeSelection, projectContext, openInspector } = useGraphStore();
@@ -114,9 +125,13 @@ export default function NodeContextMenu({ x, y, nodeId, nodeLabel, onClose }: Co
 
   const batchCount = selectedNodes.size;
 
-  const menuItems = [
+  const batchMenuItems: ContextMenuItem[] = batchCount > 1
+    ? [{ icon: Layers, label: `Research Selected (${batchCount})`, action: handleBatchResearch, color: 'text-[#b026ff]', disabled: isResearching }]
+    : [];
+
+  const menuItems: ContextMenuItem[] = [
     { icon: Search, label: isResearching ? 'Grounding...' : 'Deep Research', action: handleResearch, color: 'text-accent', disabled: isResearching },
-    ...(batchCount > 1 ? [{ icon: Layers, label: `Research Selected (${batchCount})`, action: handleBatchResearch, color: 'text-[#b026ff]', disabled: isResearching }] : []),
+    ...batchMenuItems,
     { divider: true },
     { icon: PanelRight, label: 'Open Inspector', action: () => { openInspector(nodeId); onClose(); }, color: 'text-[#00f2ff]' },
     { icon: Network, label: 'Connect to…', action: () => { openInspector(nodeId); onClose(); }, color: 'text-[#00ff66]' },
@@ -160,21 +175,23 @@ export default function NodeContextMenu({ x, y, nodeId, nodeLabel, onClose }: Co
           </div>
         </div>
       ) : (
-        menuItems.map((item, idx) =>
-          item.divider ? (
-            <div key={idx} className="border-t border-border-subtle my-1" />
-          ) : (
+        menuItems.map((item, idx) => {
+          if ('divider' in item) {
+            return <div key={idx} className="border-t border-border-subtle my-1" />;
+          }
+          const Icon = item.icon;
+          return (
             <button
               key={idx}
               onClick={item.action}
-              disabled={(item as any).disabled}
+              disabled={item.disabled}
               className={`w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-white/5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${item.color}`}
             >
-              {item.icon && <item.icon size={12} />}
+              <Icon size={12} />
               <span>{item.label}</span>
             </button>
-          )
-        )
+          );
+        })
       )}
     </div>
   );

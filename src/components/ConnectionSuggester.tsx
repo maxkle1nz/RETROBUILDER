@@ -4,7 +4,7 @@
  * Opens from the card's ⟶ button or the Inspector's Connections tab.
  * ⌘1–⌘4 shortcut keys to connect instantly.
  */
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Zap, Search } from 'lucide-react';
 import { useGraphStore } from '../store/useGraphStore';
@@ -12,6 +12,7 @@ import {
   suggestConnections,
   getAutoEdgeLabel,
   type ConnectionCandidate,
+  type NodeType,
 } from '../lib/connectionRules';
 import type { NodeData } from '../lib/api';
 
@@ -33,8 +34,33 @@ const TYPE_COLOR: Record<string, string> = {
 export default function ConnectionSuggester({ sourceNode, onClose, autoFocusSearch }: Props) {
   const graphData = useGraphStore((s) => s.graphData);
   const addLink   = useGraphStore((s) => s.addLink);
+  const [showAllTargets, setShowAllTargets] = useState(false);
 
-  const candidates: ConnectionCandidate[] = suggestConnections(sourceNode.id, graphData, 5);
+  const smartCandidates: ConnectionCandidate[] = suggestConnections(sourceNode.id, graphData, 5);
+  const allTargets = useMemo<ConnectionCandidate[]>(() => {
+    const outgoingTargets = new Set(
+      graphData.links.filter((link) => link.source === sourceNode.id).map((link) => link.target),
+    );
+    const sourceType = (sourceNode.type ?? 'backend') as NodeType;
+
+    return graphData.nodes
+      .filter((node) => node.id !== sourceNode.id && !outgoingTargets.has(node.id))
+      .map((node) => {
+        const targetType = (node.type ?? 'backend') as NodeType;
+        return {
+          node,
+          score: node.group === sourceNode.group ? 0.35 : 0.1,
+          reason: node.group === sourceNode.group ? 'Same group · manual target' : 'Manual target',
+          autoLabel: getAutoEdgeLabel(sourceType, targetType),
+        };
+      })
+      .sort((a, b) => b.score - a.score || a.node.label.localeCompare(b.node.label));
+  }, [graphData.links, graphData.nodes, sourceNode.group, sourceNode.id, sourceNode.type]);
+
+  const candidates = showAllTargets ? allTargets : smartCandidates;
+  const emptyMessage = showAllTargets
+    ? 'No remaining unconnected nodes.'
+    : 'All smart matches are already connected.';
 
   const connect = useCallback(
     (candidate: ConnectionCandidate) => {
@@ -96,10 +122,10 @@ export default function ConnectionSuggester({ sourceNode, onClose, autoFocusSear
         {/* Candidates */}
         <div className="py-1">
           {candidates.length === 0 ? (
-            <div className="px-3 py-4 text-center text-[10px] text-text-dim italic">
-              No compatible nodes found.<br />
-              All nodes already connected or no affinity match.
-            </div>
+              <div className="px-3 py-4 text-center text-[10px] text-text-dim italic">
+                No compatible nodes found.<br />
+                {emptyMessage}
+              </div>
           ) : (
             candidates.map((c, i) => {
               const tColor = TYPE_COLOR[c.node.type ?? ''] ?? '#94a3b8';
@@ -139,18 +165,15 @@ export default function ConnectionSuggester({ sourceNode, onClose, autoFocusSear
         </div>
 
         {/* Footer: connect to any */}
-        <div className="border-t border-white/6 px-3 py-2">
-          <button
-            className="w-full flex items-center gap-2 text-[9px] text-text-dim hover:text-accent transition-colors py-1"
-            onClick={() => {
-              // TODO Ph5: open Spotlight filtered to connectable nodes
-              onClose();
-            }}
-          >
-            <Search size={10} />
-            <span>Connect to any node…</span>
-          </button>
-        </div>
+          <div className="border-t border-white/6 px-3 py-2">
+            <button
+              className="w-full flex items-center gap-2 text-[9px] text-text-dim hover:text-accent transition-colors py-1"
+              onClick={() => setShowAllTargets((value) => !value)}
+            >
+              <Search size={10} />
+              <span>{showAllTargets ? 'Show smart suggestions' : `Browse all nodes (${allTargets.length})`}</span>
+            </button>
+          </div>
       </motion.div>
     </AnimatePresence>
   );

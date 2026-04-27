@@ -9,6 +9,7 @@ import {
   type SessionSummary,
 } from '../lib/api';
 import { useGraphStore } from '../store/useGraphStore';
+import { useDialogFocus } from '../lib/useDialogFocus';
 import { Archive, ArchiveRestore, DatabaseZap, FolderOpen, Pencil, Plus, Rocket, Trash2, Upload, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
@@ -16,6 +17,8 @@ import { toast } from 'sonner';
 type LauncherTab = 'new' | 'open' | 'import';
 type SessionFilter = 'all' | 'active' | 'manual' | 'imports' | 'drafts' | 'archived';
 
+const SESSION_DIALOG_TITLE_ID = 'session-launcher-title';
+const SESSION_DIALOG_DESCRIPTION_ID = 'session-launcher-description';
 const DRAFT_SESSION_PATTERN = /\b(test|teste|tmp|temp|draft|rascunho|scratch|wip|playground|sample|demo|junk|throwaway|sandbox)\b/i;
 
 function isTrivialSession(session: SessionSummary) {
@@ -58,6 +61,12 @@ export default function SessionLauncher() {
   const [showTrivial, setShowTrivial] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(false);
+  const canClose = Boolean(activeSessionId);
+  const dialogRef = useDialogFocus<HTMLDivElement>({
+    active: showSessionLauncher,
+    onClose: canClose ? closeSessionLauncher : undefined,
+    initialFocusSelector: '[data-dialog-autofocus]',
+  });
 
   useEffect(() => {
     if (!showSessionLauncher) return;
@@ -284,25 +293,35 @@ export default function SessionLauncher() {
   if (!showSessionLauncher) return null;
 
   return (
-    <div className="absolute inset-0 z-[120] bg-bg/85 backdrop-blur-md flex items-center justify-center p-6">
+    <div className="absolute inset-0 z-[120] bg-bg/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6">
       <motion.div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={SESSION_DIALOG_TITLE_ID}
+        aria-describedby={SESSION_DIALOG_DESCRIPTION_ID}
+        tabIndex={-1}
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-[#090b10] border border-accent/30 rounded-md overflow-hidden shadow-[0_0_40px_rgba(0,242,255,0.08)]"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.25em] text-accent font-bold">RETROBUILDER Sessions</div>
-            <div className="text-sm text-text-dim mt-1">Start a fresh blueprint, reopen a saved session, or reverse-engineer a codebase into a blueprint draft.</div>
+            <div id={SESSION_DIALOG_TITLE_ID} className="text-[10px] uppercase tracking-[0.25em] text-accent font-bold">RETROBUILDER Sessions</div>
+            <div id={SESSION_DIALOG_DESCRIPTION_ID} className="text-sm text-text-dim mt-1">Start a fresh blueprint, reopen a saved session, or reverse-engineer a codebase into a blueprint draft.</div>
           </div>
           {activeSessionId && (
-            <button onClick={closeSessionLauncher} className="text-text-dim hover:text-white transition-colors">
+            <button
+              onClick={closeSessionLauncher}
+              className="text-text-dim hover:text-white transition-colors"
+              aria-label="Close session launcher"
+            >
               <X size={18} />
             </button>
           )}
         </div>
 
-        <div className="flex border-b border-border-subtle">
+        <div className="flex border-b border-border-subtle" role="tablist" aria-label="Session launcher views">
           {([
             ['new', 'Novo blueprint'],
             ['open', 'Abrir sessão'],
@@ -310,6 +329,10 @@ export default function SessionLauncher() {
           ] as Array<[LauncherTab, string]>).map(([id, label]) => (
             <button
               key={id}
+              id={`session-tab-${id}`}
+              role="tab"
+              aria-selected={tab === id}
+              aria-controls={`session-panel-${id}`}
               onClick={() => setTab(id)}
               className={`flex-1 py-3 text-[11px] uppercase tracking-widest font-bold transition-colors border-b-2 ${
                 tab === id ? 'border-accent text-accent' : 'border-transparent text-text-dim hover:text-text-main'
@@ -320,11 +343,19 @@ export default function SessionLauncher() {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.08) transparent' }}>
+        <div
+          id={`session-panel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`session-tab-${tab}`}
+          className="flex-1 overflow-y-auto p-4 sm:p-6"
+          style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.08) transparent' }}
+        >
           {tab === 'new' && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
                 <input
+                  data-dialog-autofocus
+                  aria-label="New session name"
                   value={newSessionName}
                   onChange={(e) => setNewSessionName(e.target.value)}
                   placeholder="Ex.: Checkout Architecture, Billing Revamp, Search MVP"
@@ -366,6 +397,7 @@ export default function SessionLauncher() {
                       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
                         <div className="relative">
                           <input
+                            aria-label="Search sessions"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Search by name, summary or session id"
@@ -383,6 +415,7 @@ export default function SessionLauncher() {
                         </div>
                         <button
                           onClick={() => setShowTrivial((current) => !current)}
+                          aria-pressed={showTrivial}
                           className={`px-4 py-3 rounded border text-[11px] font-bold uppercase tracking-widest transition-colors ${
                             showTrivial
                               ? 'border-accent text-accent bg-accent/10'
@@ -400,6 +433,7 @@ export default function SessionLauncher() {
                       <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => setShowArchived((current) => !current)}
+                          aria-pressed={showArchived}
                           className={`px-3 py-2 rounded border text-[10px] font-bold uppercase tracking-widest transition-colors ${
                             showArchived
                               ? 'border-[#8be9fd] bg-[#8be9fd]/10 text-[#8be9fd]'
@@ -419,6 +453,7 @@ export default function SessionLauncher() {
                           <button
                             key={option.id}
                             onClick={() => setSessionFilter(option.id)}
+                            aria-pressed={sessionFilter === option.id}
                             className={`px-3 py-2 rounded border text-[10px] font-bold uppercase tracking-widest transition-colors ${
                               sessionFilter === option.id
                                 ? 'border-accent bg-accent/10 text-accent'
@@ -543,6 +578,7 @@ export default function SessionLauncher() {
                                     <button
                                       onClick={() => handleRenameSession(session)}
                                       disabled={loading}
+                                      aria-label={`Rename session ${session.name}`}
                                       className="p-2 border border-border-subtle rounded text-text-dim hover:text-accent hover:border-accent transition-colors disabled:opacity-50"
                                     >
                                       <Pencil size={14} />
@@ -550,6 +586,7 @@ export default function SessionLauncher() {
                                     <button
                                       onClick={() => handleArchiveSession(session, !session.archived)}
                                       disabled={loading}
+                                      aria-label={`${session.archived ? 'Restore' : 'Archive'} session ${session.name}`}
                                       className="p-2 border border-border-subtle rounded text-text-dim hover:text-[#8be9fd] hover:border-[#8be9fd] transition-colors disabled:opacity-50"
                                       title={session.archived ? 'Restore session' : 'Archive session'}
                                     >
@@ -558,6 +595,7 @@ export default function SessionLauncher() {
                                     <button
                                       onClick={() => handleOpenSession(session.id)}
                                       disabled={loading}
+                                      aria-label={`Open session ${session.name}`}
                                       className="px-3 py-2 bg-accent text-bg rounded text-[10px] font-bold uppercase tracking-widest hover:bg-white transition-colors disabled:opacity-50"
                                     >
                                       Open
@@ -565,6 +603,7 @@ export default function SessionLauncher() {
                                     <button
                                       onClick={() => handleDeleteSession(session)}
                                       disabled={loading}
+                                      aria-label={`Delete session ${session.name}`}
                                       className="p-2 border border-border-subtle rounded text-text-dim hover:text-[#ff5c7a] hover:border-[#ff5c7a] transition-colors disabled:opacity-50"
                                     >
                                       <Trash2 size={14} />
@@ -590,6 +629,7 @@ export default function SessionLauncher() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
                 <input
+                  aria-label="Codebase path to import"
                   value={importPath}
                   onChange={(e) => setImportPath(e.target.value)}
                   placeholder="/Users/you/Projects/some-codebase"
@@ -608,7 +648,7 @@ export default function SessionLauncher() {
                   The first import is local-path only. It synthesizes a draft blueprint, manifesto and architecture.
                 </div>
                 <div className="bg-surface/60 border border-border-subtle rounded p-4">
-                  Review the imported session before exporting to Ralph. Imported sessions still go through readiness gates.
+                  Review the imported session before exporting to OMX Builder. Imported sessions still go through readiness gates.
                 </div>
               </div>
             </div>

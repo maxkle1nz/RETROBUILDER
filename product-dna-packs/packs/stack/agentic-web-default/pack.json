@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "product-dna-pack@1",
+  "id": "stack/agentic-web-default",
+  "version": "1.0.0",
+  "family": "stack",
+  "title": "Agentic Web Default Stack",
+  "summary": "A conservative stack-routing policy for generated web products that keeps boring defaults unless the domain clearly requires a different runtime.",
+  "status": "seed",
+  "appliesTo": {
+    "nodeTypes": ["frontend", "backend", "database", "integration", "runtime", "app"],
+    "screenTypes": ["dashboard", "form", "list", "detail", "chat", "wizard", "landing"],
+    "intents": ["web app", "saas", "crm", "dashboard", "builder", "internal tool", "customer app", "bff", "api"]
+  },
+  "retrieval": {
+    "description": "Use when selecting the default technology path for generated apps, especially when the user has not requested a specific stack.",
+    "keywords": ["stack", "react", "vite", "tanstack", "hono", "drizzle", "postgres", "supabase", "neon", "next", "api", "bff"],
+    "donorSources": [
+      {
+        "label": "Vite",
+        "url": "https://vite.dev/",
+        "kind": "docs",
+        "notes": "Default fast frontend runtime for generated SPAs and prototypes."
+      },
+      {
+        "label": "TanStack Query",
+        "url": "https://tanstack.com/query/latest",
+        "kind": "docs",
+        "notes": "Default server-state layer for generated frontend clients."
+      },
+      {
+        "label": "Hono",
+        "url": "https://hono.dev/",
+        "kind": "docs",
+        "notes": "Default web-standard API layer for edge/serverless-friendly modules."
+      },
+      {
+        "label": "Drizzle ORM",
+        "url": "https://orm.drizzle.team/",
+        "kind": "docs",
+        "notes": "SQL-first type-safe persistence donor."
+      },
+      {
+        "label": "Neon",
+        "url": "https://neon.com/docs",
+        "kind": "docs",
+        "notes": "Postgres with branching and serverless ergonomics."
+      }
+    ]
+  },
+  "directives": {
+    "prompt": [
+      "Default to Vite + React for generated product surfaces unless SEO/public SSR or a full-stack framework is required.",
+      "Use TanStack Query for server state and Hono or Fastify for API surfaces.",
+      "Use Postgres-shaped relational persistence with Drizzle or Kysely when operational state matters.",
+      "Choose specialized runtimes only when the product shape demands them: game engine for games, Astro for content-heavy sites, Next.js for public SSR/SEO or one-framework delivery."
+    ],
+    "requiredElements": [
+      "Explicit reason for any non-default stack choice",
+      "Runtime scripts for dev, build, start, verify, and smoke when applicable",
+      "Clear API/client boundary and data ownership model",
+      "Dependency list kept minimal and justified"
+    ],
+    "forbiddenPatterns": [
+      "choosing Next.js by reflex for every frontend",
+      "using Firebase or Convex without realtime/offline collaboration need",
+      "adding a heavy backend framework for a small API",
+      "mixing SSR framework constraints into game runtimes"
+    ],
+    "allowedSubstitutions": [
+      "Use Next.js when SEO, public SSR, app router conventions, or a single deployable full-stack app are explicit requirements.",
+      "Use Convex when realtime collaboration is the product differentiator.",
+      "Use Turso/libSQL for edge/local-first/offline SQLite-shaped requirements.",
+      "Use Prisma when CRUD DX is more important than SQL-first control."
+    ],
+    "stackHints": [
+      "Baseline: Vite + React + TanStack Query + TanStack Router + Hono + Drizzle + Postgres.",
+      "Games should use Vite plus Phaser/Pixi/Three/PlayCanvas rather than SSR.",
+      "WhatsApp/CRM systems should prefer Postgres, TanStack Query, and an explicit webhook/idempotency layer."
+    ]
+  },
+  "validators": [
+    {
+      "id": "stack_decision_validator",
+      "severity": "warn",
+      "description": "Generated workspaces should explain any departure from the default stack path.",
+      "evidence": "README, module manifest, or build dossier stack-decision note."
+    },
+    {
+      "id": "runtime_script_validator",
+      "severity": "fail",
+      "description": "Runnable modules must expose verify/dev/build/start/smoke paths as appropriate.",
+      "evidence": "package.json scripts and smoke test logs."
+    },
+    {
+      "id": "dependency_minimalism_validator",
+      "severity": "warn",
+      "description": "Dependencies should map to product requirements and not appear as unchecked generator defaults.",
+      "evidence": "Dependency manifest and generated README notes."
+    }
+  ],
+  "receipts": {
+    "required": ["package-json-scripts", "build-log", "verify-log"],
+    "optional": ["stack-decision-record", "dependency-manifest"]
+  },
+  "provenance": {
+    "capturedAt": "2026-04-26",
+    "sourceType": "sidecar-research",
+    "sourceUrls": [
+      "https://vite.dev/",
+      "https://tanstack.com/query/latest",
+      "https://hono.dev/",
+      "https://orm.drizzle.team/",
+      "https://neon.com/docs"
+    ],
+    "notes": "Seeded from stack/runtime sidecar research."
+  }
+}
