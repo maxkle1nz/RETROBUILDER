@@ -3,6 +3,10 @@ build/
 dist/
 coverage/
 .DS_Store
+*.DS_Store
+*.py[cod]
+__pycache__/
+**/__pycache__/
 *.log
 .env*
 !.env.example
@@ -20,3 +24,22 @@ graph_snapshot.json
 plasticity_state.json
 tremor_state.json
 trust_state.json
+.codex/*
+!.codex/agents/
+!.codex/agents/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/**
+!.codex/prompts/
+!.codex/prompts/**
+.codex/prompts/ingest_roots.json
+.codex/prompts/**/ingest_roots.json
+
+# Local evidence/runtime artifacts. Keep product docs in doc/*.md and doc/l1ght/*,
+# but keep generated reports, screenshots, dumps, and vendored runtime state out
+# of review history.
+artifacts/
+doc/reports/
+.omx-codex-app-bridge/
+retrobuilder-*.png
+retrobuilder-*-snapshot.md

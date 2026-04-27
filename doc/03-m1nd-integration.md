@@ -18,6 +18,9 @@ Express router (src/server/routes/m1nd.ts)
 - The backend auto-spawns `m1nd-mcp` when available in PATH.
 - The frontend never talks to m1nd directly; it uses normal HTTP fetches.
 - All raw m1nd client methods degrade gracefully to `null` or offline status.
+- The canonical local runtime surface is the RETROBUILDER server itself on port `7777`.
+  The correct live health probe is:
+  - `http://127.0.0.1:7777/api/m1nd/health`
 
 ## 2. Session-Projected Architecture
 
@@ -133,8 +136,10 @@ What is true today:
 - The important operator surface is session-projected analysis, not raw endpoint sprawl.
 - Raw endpoints still exist for direct graph work and diagnostics.
 - The M1ND cockpit already surfaces blocker truth honestly (for example `EMPTY_BLUEPRINT` on a blank session).
+- The verified local smoke command is:
+  - `npm run smoke:m1nd`
 
 ## 9. Known Current Gaps
 
-- The full browser-level visual journey from blueprint generation -> projected m1nd analysis -> KOMPLETUS -> OMX build is not yet automated as one end-to-end specular test.
+- SPECULAR/OMX/reload truth has deterministic browser proof, and the live KOMPLETUS browser harness exists as an opt-in credentialed lane. The remaining gap is broader visual parity across every graph card, report, inspector, knowledge-bank, and final handoff surface, not the existence of a first browser-level handoff proof.
 - Some legacy documentation and builder-store surfaces still mention SPECULAR loop behavior that belongs to `omx-runner.ts`, while the active routed OMX runtime is `omx-runtime.ts`.

@@ -8,8 +8,10 @@ RETROBUILDER is a session-first visual architecture workbench for designing syst
 2. AI-assisted generation: use the SSOT provider layer to generate skeletons, proposals, contracts, and rationale from prompts.
 3. Structural analysis: project the active blueprint into m1nd so users can inspect readiness, impact, gaps, diagrams, layers, metrics, and activation results.
 4. Grounded research: attach real-world research and document/code bindings to nodes before committing to implementation.
-5. Autonomous handoff: move a validated blueprint into the real OMX build lifecycle and watch progress in BU1LDER mode.
-6. Specular truth: keep user-facing surfaces aligned with backend pipeline/runtime truth instead of decorative status theater.
+5. Autonomous handoff: move a validated blueprint into the real OMX build lifecycle and finish with a stack-aware runnable manifest.
+6. Product DNA: apply curated domain/design/stack guidance through knowledge-bank contracts instead of relying on generic prompts.
+7. Specular truth: keep user-facing surfaces aligned with backend pipeline/runtime truth instead of decorative status theater.
+8. Local safety: keep sensitive AI/config/build routes behind the local API guard and keep generated/runtime artifacts out of Git history.
 
 ## Current Product Shape
 - Session-first workflow: new blueprint, reopen session, or import codebase into a backend-backed session.
@@ -18,12 +20,14 @@ RETROBUILDER is a session-first visual architecture workbench for designing syst
   - M1ND — inspect readiness, impact, gaps, grounding, and advanced graph actions.
   - BU1LDER — follow the live OMX build lifecycle and terminal recovery state.
 - KOMPLETUS pipeline: 8 stages from skeleton generation to quality-gated report delivery.
-- OMX runtime: explicit `build`, `status`, `stop`, and `stream` routes backed by `src/server/omx-runtime.ts`.
+- OMX runtime: explicit `build`, `status`, `stop`, and `stream` routes backed by `src/server/omx-runtime.ts`, with final `.omx/runnable-manifest.json` handoff metadata.
+- Knowledge bank/Product DNA: versioned packs, validators, receipts, and review routes that guide generation by product type.
 
 ## High-Level Architecture
 - Frontend: React 19, Vite 6, Tailwind 4, Zustand 5, `@xyflow/react`, motion, lucide-react.
 - Backend: Express route modules for `sessions`, `config`, `m1nd`, `omx`, and `ai`.
 - AI integration: SSOT provider layer for xAI, Gemini, OpenAI, and THE BRIDGE.
+- Local security: token guard for AI/config/m1nd/OMX/import routes plus explicit Git hygiene contracts for generated artifacts.
 - m1nd integration: server-side MCP stdio bridge plus session projection/readiness/impact/gap analysis.
 - Research: multi-source web research plus m1nd document binding/drift enrichment.
 - Build runtime: real Codex-backed OMX lifecycle with persisted terminal truth and builder reentry hydration.

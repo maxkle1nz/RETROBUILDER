@@ -1,0 +1,121 @@
+name: Retrobuilder Readiness
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      full_readiness:
+        description: "Run the full local readiness gate. Requires m1nd availability in the runner."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Generated workspace contracts
+        run: npm run verify:generated-workspace
+
+      - name: Security and Git hygiene
+        run: npm run verify:security
+
+      - name: Readiness contract
+        run: npx tsx tests/release-readiness-contract.test.ts
+
+      - name: CI workflow contract
+        run: npx tsx tests/ci-readiness-contract.test.ts
+
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrobuilder-dist
+          path: dist
+          if-no-files-found: ignore
+
+  full-readiness:
+    name: Full local readiness gate
+    if: github.event_name == 'workflow_dispatch' && inputs.full_readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      RETROBUILDER_PORT: "7798"
+      RETROBUILDER_TEST_BASE: "http://127.0.0.1:7798"
+      RETROBUILDER_BROWSER_ARTIFACT_DIR: ".retrobuilder/browser-artifacts"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Select Chromium binary
+        run: |
+          set -euo pipefail
+          for candidate in \
+            /usr/bin/google-chrome \
+            /usr/bin/google-chrome-stable \
+            /usr/bin/chromium \
+            /usr/bin/chromium-browser \
+            google-chrome \
+            google-chrome-stable \
+            chromium \
+            chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              echo "CHROMIUM_BIN=$(command -v "$candidate")" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            if [ -x "$candidate" ]; then
+              echo "CHROMIUM_BIN=$candidate" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "No Chrome/Chromium binary found in runner." >&2
+          exit 1
+
+      - name: Full readiness
+        run: npm run verify:readiness
+
+      - name: Upload readiness logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrobuilder-readiness-logs
+          path: |
+            .omx/logs
+            .retrobuilder/browser-artifacts
+            dist
+          if-no-files-found: ignore

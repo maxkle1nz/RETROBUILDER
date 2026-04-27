@@ -144,12 +144,22 @@ interface OmxBuildStartResponse {
     available: boolean;
   };
   source: 'persisted-session' | 'session-draft';
+  designProfile?: '21st';
+  designGateStatus?: 'pending' | 'passed' | 'failed';
+  designScore?: number;
+  designFindings?: string[];
+  designEvidence?: string[];
 }
 
 interface OmxBuildResultSummary {
   totalFiles: number;
   totalLines: number;
   elapsedMs: number;
+  systemVerify?: {
+    status: 'pending' | 'passed' | 'failed' | 'not_available';
+    command?: string;
+    summary?: string;
+  };
 }
 
 interface OmxStatusResponse {
@@ -170,6 +180,49 @@ interface OmxStatusResponse {
   nodeStates?: Record<string, 'dormant' | 'queued' | 'building' | 'complete' | 'error'>;
   result?: OmxBuildResultSummary;
   terminalMessage?: string;
+  designProfile?: '21st';
+  designGateStatus?: 'pending' | 'passed' | 'failed';
+  designScore?: number;
+  designFindings?: string[];
+  designEvidence?: string[];
+  resumeAvailable?: boolean;
+  resumeReason?: 'interrupted' | 'stopped' | 'failed';
+  wavesTotal?: number;
+  wavesCompleted?: number;
+  activeWaveId?: string | null;
+  activeTasks?: string[];
+  workerCount?: number;
+  verifyPendingCount?: number;
+  mergePendingCount?: number;
+  ledgerVersion?: number;
+}
+
+async function createDesignBlockedSession(): Promise<SessionDocument> {
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return createSession({
+    name: `OMX Design Block ${stamp}`,
+    source: 'manual',
+    manifesto: 'A user-facing system still needs real UIX certification before build.',
+    architecture: 'Frontend surfaces must pass the 21st design gate before OMX starts.',
+    projectContext: 'Contract test for design gate blocking at OMX build start.',
+    graph: {
+      nodes: [
+        {
+          id: 'broken-frontend',
+          label: 'Broken Frontend',
+          description: 'A user-facing surface with no contract discipline.',
+          status: 'pending',
+          type: 'frontend',
+          group: 1,
+          priority: 1,
+          data_contract: '',
+          acceptance_criteria: [],
+          error_handling: [],
+        },
+      ],
+      links: [],
+    },
+  });
 }
 
 async function test_omx_build_route_prefers_explicit_session_draft_when_provided() {
@@ -280,8 +333,126 @@ async function test_omx_build_route_returns_real_runtime_contract() {
       expect(typeof data?.transport?.command === 'string' && data.transport.command.length > 0, 'Expected build payload to expose the Codex command explicitly.');
       expect(typeof data?.transport?.available === 'boolean', 'Expected build payload to surface Codex availability as a boolean.');
       expect(data?.source === 'persisted-session', `Expected persisted-session builds to disclose source='persisted-session'. Got: ${String(data?.source)}`);
+      expect(data?.designProfile === '21st', `Expected build payload to expose the active design profile. Got: ${String(data?.designProfile)}`);
+      expect(data?.designGateStatus === 'passed', `Expected build payload to expose a passed design gate for a well-formed session. Got: ${String(data?.designGateStatus)}`);
+      expect(typeof data?.designScore === 'number', `Expected build payload to expose a numeric design score. Got: ${truncate(text)}`);
     });
   } finally {
+    await deleteSession(session.id);
+  }
+}
+
+async function test_omx_build_route_blocks_when_design_gate_fails() {
+  const session = await createDesignBlockedSession();
+  try {
+    await withOmxServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/omx/build`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      const text = await response.text();
+      const data = safeJson(text) as { error?: string; design?: Record<string, unknown> } | null;
+
+      expect(
+        response.status === 409,
+        `Expected OMX build start to be blocked when the 21st design gate fails. Got ${response.status}: ${truncate(text)}`,
+      );
+      expect(
+        typeof data?.error === 'string' && /design gate/i.test(data.error),
+        `Expected design-gate rejection to mention the design gate explicitly. Got: ${truncate(text)}`,
+      );
+      expect(
+        data?.design?.designProfile === '21st',
+        `Expected design-gate rejection payload to include structured design summary. Got: ${truncate(text)}`,
+      );
+      expect(
+        data?.design?.designGateStatus === 'failed',
+        `Expected design-gate rejection payload to expose failed gate status. Got: ${truncate(text)}`,
+      );
+
+      const statusResponse = await fetch(`${baseUrl}/api/omx/status/${session.id}`);
+      const statusText = await statusResponse.text();
+      const status = safeJson(statusText) as OmxStatusResponse | null;
+      expect(
+        statusResponse.status === 200,
+        `Expected blocked build status to be persisted for reload/re-entry. Got ${statusResponse.status}: ${truncate(statusText)}`,
+      );
+      expect(
+        status?.status === 'failed',
+        `Expected persisted blocked status to report failed. Got: ${truncate(statusText)}`,
+      );
+      expect(
+        status?.designGateStatus === 'failed',
+        `Expected persisted blocked status to preserve designGateStatus=failed. Got: ${truncate(statusText)}`,
+      );
+      expect(
+        status?.resumeAvailable === false || status?.resumeAvailable === undefined,
+        `Expected design-gate block before execution not to advertise resumability yet. Got: ${truncate(statusText)}`,
+      );
+
+      const historyResponse = await fetch(`${baseUrl}/api/omx/history/${session.id}`);
+      const historyText = await historyResponse.text();
+      const history = safeJson(historyText) as { events?: Array<Record<string, unknown>> } | null;
+      expect(
+        historyResponse.status === 200,
+        `Expected design-gate block to be recorded in OMX history. Got ${historyResponse.status}: ${truncate(historyText)}`,
+      );
+      expect(
+        history?.events?.some((event) => event.type === 'build_terminal' && event.status === 'failed' && /BUILD BLOCKED/i.test(String(event.message || ''))),
+        `Expected history to include a failed BUILD BLOCKED terminal event. Got: ${truncate(historyText)}`,
+      );
+      expect(
+        history?.events?.some((event) => event.designGateStatus === 'failed'),
+        `Expected history to preserve failed design gate metadata. Got: ${truncate(historyText)}`,
+      );
+    });
+  } finally {
+    await deleteSession(session.id);
+  }
+}
+
+async function test_omx_build_route_treats_design_gate_block_as_controlled_warning_not_runtime_error() {
+  const session = await createDesignBlockedSession();
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const errorCalls: string[] = [];
+  const warnCalls: string[] = [];
+
+  console.error = (...args: unknown[]) => {
+    errorCalls.push(args.map((arg) => String(arg)).join(' '));
+  };
+  console.warn = (...args: unknown[]) => {
+    warnCalls.push(args.map((arg) => String(arg)).join(' '));
+  };
+
+  try {
+    await withOmxServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/omx/build`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      const text = await response.text();
+
+      expect(
+        response.status === 409,
+        `Expected design-gate rejection to remain a controlled 409 response. Got ${response.status}: ${truncate(text)}`,
+      );
+    });
+
+    expect(errorCalls.length === 0, `Expected design-gate blocks to avoid console.error noise. Got: ${errorCalls.join(' | ')}`);
+    expect(
+      warnCalls.some((entry) => /design gate/i.test(entry)),
+      `Expected design-gate blocks to emit a warning-level operational log. Got: ${warnCalls.join(' | ')}`,
+    );
+    expect(
+      !warnCalls.some((entry) => /error-handling/i.test(entry)),
+      `Expected design-gate warning log to avoid echoing raw finding text that trips generic error alerts. Got: ${warnCalls.join(' | ')}`,
+    );
+  } finally {
+    console.error = originalError;
+    console.warn = originalWarn;
     await deleteSession(session.id);
   }
 }
@@ -304,6 +475,8 @@ async function test_omx_status_route_reports_idle_runtime_before_build_start() {
       expect(data?.transport?.kind === 'codex-cli', 'Expected status payload to expose Codex CLI as the native transport.');
       expect(typeof data?.transport?.command === 'string' && data.transport.command.length > 0, 'Expected status payload to expose a concrete Codex command.');
       expect(typeof data?.transport?.available === 'boolean', 'Expected status payload to surface Codex availability as a boolean.');
+      expect(data?.designProfile === '21st', `Expected idle OMX status to disclose the 21st design profile. Got: ${String(data?.designProfile)}`);
+      expect(data?.resumeAvailable === false, `Expected idle OMX status not to advertise resume availability. Got: ${truncate(text)}`);
     });
   } finally {
     await deleteSession(session.id);
@@ -339,6 +512,7 @@ async function test_omx_status_route_reflects_active_build_after_explicit_start(
       expect(status?.buildId === build?.buildId, 'Expected active status payload to reuse the buildId returned by POST /api/omx/build.');
       expect(status?.status === 'queued' || status?.status === 'running', `Expected active OMX status to be queued or running. Got: ${status?.status}`);
       expect(status?.workspacePath === build?.workspacePath, 'Expected active status payload to report the same workspacePath returned by POST /api/omx/build.');
+      expect(status?.designGateStatus === 'passed', `Expected active status payload to preserve the passed design gate. Got: ${String(status?.designGateStatus)}`);
     });
   } finally {
     await deleteSession(session.id);
@@ -406,6 +580,12 @@ async function test_omx_stop_route_stops_active_build() {
         status?.status === 'stopping' || status?.status === 'stopped',
         `Expected post-stop status polling to expose stopping or stopped lifecycle state. Got: ${truncate(statusText)}`,
       );
+      if (status?.status === 'stopped') {
+        expect(
+          status?.resumeAvailable === true && status?.resumeReason === 'stopped',
+          `Expected stopped OMX status to advertise explicit resume truth. Got: ${truncate(statusText)}`,
+        );
+      }
     });
   } finally {
     await deleteSession(session.id);
@@ -547,6 +727,58 @@ async function test_omx_start_route_reuses_stopping_build_identity_without_downg
   }
 }
 
+async function test_omx_start_route_reuses_stopped_parallel_build_identity_before_cleanup_window_expires() {
+  const session = await createReadySession();
+  try {
+    await withOmxServer(async (baseUrl) => {
+      const buildResponse = await fetch(`${baseUrl}/api/omx/build`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      const buildText = await buildResponse.text();
+      const build = safeJson(buildText) as OmxBuildStartResponse | null;
+      expect(buildResponse.status === 202, `Expected initial build start to succeed before stopped-resume probe. Got ${buildResponse.status}: ${truncate(buildText)}`);
+
+      const stopResponse = await fetch(`${baseUrl}/api/omx/stop/${session.id}`, { method: 'POST' });
+      const stopText = await stopResponse.text();
+      const stop = safeJson(stopText) as { status?: string; buildId?: string } | null;
+      expect(stopResponse.status === 202, `Expected stop request to succeed before stopped-resume probe. Got ${stopResponse.status}: ${truncate(stopText)}`);
+      expect(stop?.status === 'stopping' || stop?.status === 'stopped', `Expected stop request to move build into stopping/stopped state before resume probe. Got: ${String(stop?.status)}`);
+
+      const deadline = Date.now() + 4000;
+      let stoppedStatus: OmxStatusResponse | null = null;
+      while (Date.now() < deadline) {
+        const statusResponse = await fetch(`${baseUrl}/api/omx/status/${session.id}`);
+        const statusText = await statusResponse.text();
+        const status = safeJson(statusText) as OmxStatusResponse | null;
+        if (status?.status === 'stopped') {
+          stoppedStatus = status;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      expect(stoppedStatus?.status === 'stopped', `Expected stop lifecycle to settle into stopped before resume-window reuse. Got: ${truncate(JSON.stringify(stoppedStatus))}`);
+      expect(stoppedStatus?.resumeAvailable === true && stoppedStatus?.resumeReason === 'stopped', `Expected stopped build to advertise resume availability before cleanup window expires. Got: ${truncate(JSON.stringify(stoppedStatus))}`);
+
+      const restartResponse = await fetch(`${baseUrl}/api/omx/build`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      const restartText = await restartResponse.text();
+      const restart = safeJson(restartText) as OmxBuildStartResponse | null;
+
+      expect(restartResponse.status === 202, `Expected stopped-resume probe to succeed before cleanup window expires. Got ${restartResponse.status}: ${truncate(restartText)}`);
+      expect(restart?.buildId === build?.buildId, 'Expected stopped resume window to reuse the same buildId instead of spawning a duplicate parallel build.');
+      expect(restart?.status === 'stopped', `Expected stopped resume window to preserve stopped status until cleanup window expires. Got: ${String(restart?.status)}`);
+    });
+  } finally {
+    await deleteSession(session.id);
+  }
+}
+
 async function test_omx_start_route_starts_fresh_build_after_stopped_build_is_persisted() {
   const session = await createReadySession();
   try {
@@ -586,7 +818,7 @@ async function test_omx_start_route_starts_fresh_build_after_stopped_build_is_pe
   }
 }
 
-async function test_omx_build_complete_does_not_claim_specular_certification_without_real_validation() {
+async function test_omx_build_complete_exposes_specular_gate_approval_after_real_design_validation() {
   const session = await createReadySession();
   try {
     await withFakeCodex(async () => {
@@ -648,8 +880,12 @@ async function test_omx_build_complete_does_not_claim_specular_certification_wit
         `Expected OMX stream to emit a build_complete event for build ${build?.buildId}. Got: ${truncate(buffer)}`,
       );
       expect(
-        !('specular' in (completionPayload || {})),
-        `Expected build_complete to avoid claiming SPECULAR certification before real validation exists. Got: ${truncate(JSON.stringify(completionPayload))}`,
+        typeof completionPayload?.specular === 'object',
+        `Expected build_complete to expose SPECULAR gate metadata after real design validation. Got: ${truncate(JSON.stringify(completionPayload))}`,
+      );
+      expect(
+        (completionPayload?.specular as Record<string, unknown> | undefined)?.gateApproved === true,
+        `Expected successful real build to report specular.gateApproved=true. Got: ${truncate(JSON.stringify(completionPayload))}`,
       );
 });
     });
@@ -691,6 +927,11 @@ async function test_omx_status_route_persists_terminal_recovery_summary_after_su
         expect(terminalStatus?.completedNodes === terminalStatus?.totalNodes, `Expected succeeded OMX status to report all nodes completed. Got: ${truncate(JSON.stringify(terminalStatus))}`);
         expect(terminalStatus?.buildProgress === 100, `Expected succeeded OMX status to report 100% buildProgress. Got: ${truncate(JSON.stringify(terminalStatus))}`);
         expect(terminalStatus?.nodeStates?.['api-core'] === 'complete', `Expected succeeded OMX status to preserve nodeStates for builder reentry. Got: ${truncate(JSON.stringify(terminalStatus))}`);
+        expect(terminalStatus?.designGateStatus === 'passed', `Expected succeeded OMX status to persist a passed design gate. Got: ${truncate(JSON.stringify(terminalStatus))}`);
+        expect(typeof terminalStatus?.designScore === 'number', `Expected succeeded OMX status to persist designScore. Got: ${truncate(JSON.stringify(terminalStatus))}`);
+        expect(terminalStatus?.result?.systemVerify?.status === 'passed', `Expected OMX status to surface passed final system verify truth. Got: ${truncate(JSON.stringify(terminalStatus))}`);
+        expect(terminalStatus?.result?.systemVerify?.command === 'npm run smoke', `Expected terminal system verify to prefer the generated root smoke wrapper. Got: ${truncate(JSON.stringify(terminalStatus))}`);
+        expect(String(terminalStatus?.result?.systemVerify?.summary || '').includes('ready'), `Expected terminal system verify summary to include runtime readiness evidence. Got: ${truncate(JSON.stringify(terminalStatus))}`);
       });
     });
   } finally {
@@ -728,7 +969,46 @@ async function test_omx_status_route_persists_terminal_message_after_stop() {
       }
 
       expect(terminalStatus?.status === 'stopped', `Expected OMX status polling to surface stopped terminal state. Got: ${truncate(JSON.stringify(terminalStatus))}`);
+      const wavesTotal = terminalStatus?.wavesTotal;
+      expect(terminalStatus?.resumeAvailable === true && terminalStatus?.resumeReason === 'stopped', `Expected stopped OMX status to preserve resume availability for parallel-wave recovery. Got: ${truncate(JSON.stringify(terminalStatus))}`);
       expect(typeof terminalStatus?.terminalMessage === 'string' && /stopped/i.test(terminalStatus.terminalMessage), `Expected stopped OMX status to preserve a terminalMessage for builder reentry diagnostics. Got: ${truncate(JSON.stringify(terminalStatus))}`);
+      expect(typeof wavesTotal === 'number' && wavesTotal >= 1, `Expected stopped OMX status to preserve parallel wave totals for builder reentry diagnostics. Got: ${truncate(JSON.stringify(terminalStatus))}`);
+    });
+  } finally {
+    await deleteSession(session.id);
+  }
+}
+
+async function test_omx_history_route_returns_persisted_build_events() {
+  const session = await createReadySession();
+  try {
+    await withFakeCodex(async () => {
+      await withOmxServer(async (baseUrl) => {
+        const buildResponse = await fetch(`${baseUrl}/api/omx/build`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: session.id }),
+        });
+        const buildText = await buildResponse.text();
+        expect(buildResponse.status === 202, `Expected build start to succeed before history inspection. Got ${buildResponse.status}: ${truncate(buildText)}`);
+
+        const deadline = Date.now() + 8000;
+        let historyPayload: { events?: Array<Record<string, unknown>> } | null = null;
+        while (Date.now() < deadline) {
+          const historyResponse = await fetch(`${baseUrl}/api/omx/history/${session.id}`);
+          const historyText = await historyResponse.text();
+          const history = safeJson(historyText) as { events?: Array<Record<string, unknown>> } | null;
+          if (Array.isArray(history?.events) && history.events.some((event) => event.type === 'build_complete')) {
+            historyPayload = history;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+
+        expect(historyPayload?.events && historyPayload.events.length > 0, 'Expected OMX history route to return persisted build events.');
+        expect(historyPayload?.events?.some((event) => event.type === 'build_start'), 'Expected OMX history to include build_start.');
+        expect(historyPayload?.events?.some((event) => event.type === 'build_complete'), 'Expected OMX history to include build_complete.');
+      });
     });
   } finally {
     await deleteSession(session.id);
@@ -740,6 +1020,8 @@ async function run() {
     test_omx_build_route_prefers_explicit_session_draft_when_provided,
     test_omx_build_route_rejects_real_builds_when_codex_transport_is_unavailable,
     test_omx_build_route_returns_real_runtime_contract,
+    test_omx_build_route_blocks_when_design_gate_fails,
+    test_omx_build_route_treats_design_gate_block_as_controlled_warning_not_runtime_error,
     test_omx_status_route_reports_idle_runtime_before_build_start,
     test_omx_status_route_reflects_active_build_after_explicit_start,
     test_omx_stop_route_rejects_stop_requests_without_active_build,
@@ -747,10 +1029,12 @@ async function run() {
     test_omx_stream_requires_explicit_build_start_and_never_autostarts_simulation,
     test_omx_stream_emits_real_build_identity_after_explicit_build_start,
     test_omx_start_route_reuses_stopping_build_identity_without_downgrading_status,
+    test_omx_start_route_reuses_stopped_parallel_build_identity_before_cleanup_window_expires,
     test_omx_start_route_starts_fresh_build_after_stopped_build_is_persisted,
-    test_omx_build_complete_does_not_claim_specular_certification_without_real_validation,
+    test_omx_build_complete_exposes_specular_gate_approval_after_real_design_validation,
     test_omx_status_route_persists_terminal_recovery_summary_after_success,
     test_omx_status_route_persists_terminal_message_after_stop,
+    test_omx_history_route_returns_persisted_build_events,
   ];
 
   let passed = 0;

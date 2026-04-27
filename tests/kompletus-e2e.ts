@@ -10,7 +10,7 @@
  *         npx tsx tests/kompletus-e2e.ts   (uses default prompt)
  */
 
-const BASE = 'http://localhost:3000';
+const BASE = 'http://localhost:7777';
 const PROMPT = process.argv[2] || 'Simple task manager with auth and notifications';
 const TIMEOUT_MS = 600_000; // 10 min max
 
@@ -34,6 +34,33 @@ interface KompletusResult {
     coverage: Array<{ backendPhase: string; momentId: string; momentLabel: string; confidence: number }>;
     nodeScreenMap: Array<{ nodeId: string; label: string; hasUserSurface: boolean; screenType?: string; userActions?: string[]; dataDisplayed?: string[] }>;
     parityScore: number;
+  };
+  specularCreate: {
+    designProfile: '21st';
+    artifacts: Array<{
+      nodeId: string;
+      selectedVariantId: string;
+      previewArtifact: {
+        kind: 'tsx';
+        tsx: string;
+        blocks: Array<{ id: string; kind: string; title: string }>;
+      };
+      designVerdict: {
+        status: 'pending' | 'passed' | 'failed';
+        score: number;
+        findings: string[];
+        evidence: string[];
+      };
+    }>;
+    gate: {
+      designProfile: '21st';
+      designGateStatus: 'pending' | 'passed' | 'failed';
+      designScore: number;
+      designFindings: string[];
+      designEvidence: string[];
+      affectedNodeIds: string[];
+    };
+    warnings: string[];
   };
   l1ght: {
     expandedContracts: number;
@@ -208,6 +235,37 @@ async function main() {
       }
     }
 
+    if (!result.specularCreate) failures.push('Missing specularCreate data');
+    if (result.specularCreate) {
+      if (result.specularCreate.designProfile !== '21st') failures.push(`SPECULAR CREATE: wrong design profile (${result.specularCreate.designProfile})`);
+      if (!Array.isArray(result.specularCreate.artifacts)) failures.push('SPECULAR CREATE: artifacts missing');
+      if (!result.specularCreate.gate) failures.push('SPECULAR CREATE: gate missing');
+      if (result.specularCreate.gate && (result.specularCreate.gate.designScore < 0 || result.specularCreate.gate.designScore > 100)) {
+        failures.push(`SPECULAR CREATE: designScore out of range (${result.specularCreate.gate.designScore})`);
+      }
+
+      const userFacingIds = new Set(
+        result.specular.nodeScreenMap.filter((entry) => entry.hasUserSurface).map((entry) => entry.nodeId),
+      );
+      for (const artifact of result.specularCreate.artifacts || []) {
+        if (!userFacingIds.has(artifact.nodeId)) {
+          failures.push(`SPECULAR CREATE: artifact generated for non user-facing node ${artifact.nodeId}`);
+        }
+        if (artifact.previewArtifact?.kind !== 'tsx') {
+          failures.push(`SPECULAR CREATE: artifact ${artifact.nodeId} is not tsx-backed`);
+        }
+        if (!artifact.previewArtifact?.tsx) {
+          failures.push(`SPECULAR CREATE: artifact ${artifact.nodeId} missing tsx`);
+        }
+        if (!artifact.previewArtifact?.blocks?.length) {
+          failures.push(`SPECULAR CREATE: artifact ${artifact.nodeId} missing blocks`);
+        }
+        if (typeof artifact.designVerdict?.score !== 'number') {
+          failures.push(`SPECULAR CREATE: artifact ${artifact.nodeId} missing design verdict score`);
+        }
+      }
+    }
+
     // Per-node checks
     for (const node of result.graph.nodes) {
       const n = node as Record<string, unknown>;
@@ -252,6 +310,13 @@ async function main() {
       for (const moment of result.specular.moments) {
         console.log(`    ${moment.id}: "${moment.label}" ← [${moment.backendStages.join(', ')}]`);
       }
+    }
+
+    if (result.specularCreate) {
+      console.log();
+      console.log('  ✨ SPECULAR CREATE:');
+      console.log(`  Design gate:     ${result.specularCreate.gate.designGateStatus} (${result.specularCreate.gate.designScore}%)`);
+      console.log(`  Artifacts:       ${result.specularCreate.artifacts.length}`);
     }
 
     if (result.qualityGate.remainingIssues.length > 0) {

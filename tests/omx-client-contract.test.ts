@@ -41,6 +41,26 @@ function test_api_client_exposes_explicit_omx_build_lifecycle_helpers() {
     source.includes('/api/omx/stop/${sessionId}'),
     'Expected the OMX API client surface to target /api/omx/stop/${sessionId}.',
   );
+  expect(
+    source.includes('OmxBuildBlockedError'),
+    'Expected api.ts to expose a dedicated OmxBuildBlockedError for design-gate build blocks.',
+  );
+  expect(
+    source.includes('retryOmxTask'),
+    'Expected src/lib/api.ts to expose a retryOmxTask helper for merge/task recovery.',
+  );
+  expect(
+    source.includes('/api/omx/retry/${sessionId}'),
+    'Expected the OMX API client surface to target /api/omx/retry/${sessionId}.',
+  );
+  expect(
+    source.includes('reassignOmxTaskOwnership'),
+    'Expected src/lib/api.ts to expose a reassignOmxTaskOwnership helper for owner arbitration.',
+  );
+  expect(
+    source.includes('/api/omx/reassign/${sessionId}'),
+    'Expected the OMX API client surface to target /api/omx/reassign/${sessionId}.',
+  );
 }
 
 async function test_right_panel_persists_and_hydrates_before_real_omx_build_activation() {
@@ -126,6 +146,39 @@ function test_kompletus_report_starts_real_omx_build_before_builder_mode_activat
     startIdx < stoppedGuardIdx && stoppedGuardIdx < builderIdx,
     'Expected KompletusReport to reject stale stopped reuse before switching the app into builder mode.',
   );
+  expect(
+    source.includes('error instanceof OmxBuildBlockedError'),
+    'Expected KompletusReport to handle structured design-gate build blocks.',
+  );
+  expect(
+    source.includes("setActiveView('specular')"),
+    'Expected KompletusReport to route users back to the SPECULAR view when the design gate blocks OMX.',
+  );
+  expect(
+    source.includes('failingNodeIds?.[0] || error.design?.affectedNodeIds?.[0]'),
+    'Expected KompletusReport to prefer the actual failing node when design gate routing occurs.',
+  );
+}
+
+function test_right_panel_routes_design_gate_blocks_back_to_uix_editor() {
+  const source = read('src/components/RightPanel.tsx');
+
+  expect(
+    source.includes('error instanceof OmxBuildBlockedError'),
+    'Expected RightPanel to handle structured design-gate build blocks.',
+  );
+  expect(
+    source.includes("setTab('uix')"),
+    'Expected RightPanel to switch into the UIX tab when OMX build is blocked by design.',
+  );
+  expect(
+    source.includes('failingNodeIds?.[0] || error.design?.affectedNodeIds?.[0]'),
+    'Expected RightPanel to prefer the actual failing node when routing back to UIX after a design-gate block.',
+  );
+  expect(
+    source.includes('inspectorNodeId: blockedNodeId'),
+    'Expected RightPanel to atomically open the SSOT node editor for the first design-blocked node.',
+  );
 }
 
 function test_build_view_hydrates_remote_omx_status_for_builder_reentry() {
@@ -154,6 +207,26 @@ function test_build_view_hydrates_remote_omx_status_for_builder_reentry() {
   expect(
     source.includes("remote.status === 'failed'"),
     'Expected BuildView builder reentry flow to preserve failed state instead of losing terminal failure on refresh/re-entry.',
+  );
+  expect(
+    source.includes('resumeOmxBuild'),
+    'Expected BuildView to expose a first-class resume action instead of relying only on chat regexes.',
+  );
+  expect(
+    source.includes('resumeAvailable = useBuildStore'),
+    'Expected BuildView to surface resume availability from persisted OMX status truth.',
+  );
+  expect(
+    source.includes('fetchOmxHistory'),
+    'Expected BuildView to fetch persisted OMX event history on builder reentry.',
+  );
+  expect(
+    source.includes('processBuildEvent'),
+    'Expected BuildView reentry flow to replay persisted OMX events into the local store.',
+  );
+  expect(
+    source.includes('Resume ${resumeReason'),
+    'Expected BuildView resume CTA to explain why the build is resumable.',
   );
 }
 
@@ -200,6 +273,7 @@ function run() {
     test_api_client_exposes_explicit_omx_build_lifecycle_helpers,
     test_right_panel_persists_and_hydrates_before_real_omx_build_activation,
     test_kompletus_report_starts_real_omx_build_before_builder_mode_activation,
+    test_right_panel_routes_design_gate_blocks_back_to_uix_editor,
     test_build_view_hydrates_remote_omx_status_for_builder_reentry,
     test_build_store_uses_persisted_terminal_recovery_state_without_placeholder_metrics,
     test_omx_stream_falls_back_to_remote_status_when_terminal_sse_is_missed,

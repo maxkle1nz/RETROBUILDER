@@ -92,7 +92,7 @@ For full autonomous handoff into OMX, the current preferred flow is:
 KREATOR proposals are structurally grounded, but the user still decides whether to apply them.
 
 [AMBER warning: visual-specular-gap]
-There is not yet one browser-level proof that the entire user journey from KREATOR/KOMPLETUS into OMX is visually truth-preserving.
+SPECULAR showcase and OMX handoff truth are browser-proved for the focused journey. The remaining visual risk is parity across every card/report/inspector/knowledge-bank surface, not the absence of first handoff proof.
 
 [GREEN note: graceful-degradation]
 If m1nd is offline, proposal generation still works; it simply loses structural grounding.

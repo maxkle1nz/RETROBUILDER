@@ -61,7 +61,7 @@ Current state at code level:
 Remaining visual gaps:
 - continue tightening large-graph density under real dogfood sessions
 - keep the card/report/inspector language aligned so the module reads consistently across surfaces
-- add explicit browser-level proof that the visual card/report surfaces reflect backend truth end-to-end
+- SPECULAR showcase and OMX handoff now have focused browser-level truth-manifest proof; the remaining gap is wider parity coverage across graph cards, reports, inspector surfaces, knowledge-bank guidance, and final runnable handoff
 
 Current node data available:
 - `label`
